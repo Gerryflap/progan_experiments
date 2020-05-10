@@ -97,14 +97,15 @@ class ProGANGenerator(torch.nn.Module):
 
 
 class ProGANDownBlock(torch.nn.Module):
-    def __init__(self, input_channels, output_channels, downsample=True, local_response_norm=False):
+    def __init__(self, input_channels, output_channels, downsample=True, local_response_norm=False, progan_var_input=False):
         super().__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
+        self.progran_var_input = progan_var_input
 
         self.conv_1 = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
         self.conv_2 = Conv2dNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_rgb = Conv2dNormalizedLR(3, input_channels, kernel_size=1)
+        self.conv_rgb = Conv2dNormalizedLR(3, (input_channels - 1) if progan_var_input else input_channels, kernel_size=1)
         self.downsample = downsample
         self.lrn = local_response_norm
 
@@ -126,7 +127,6 @@ class ProGANDownBlock(torch.nn.Module):
     def from_rgb(self, x):
         # Generated an input for this network from RGB
         x = self.conv_rgb(x)
-        x = F.leaky_relu(x)
         return x
 
 
@@ -140,8 +140,8 @@ class ProGANDiscriminator(torch.nn.Module):
 
         self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
         self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, 1)
-        outp_block = ProGANDownBlock(self.deepest_channels, self.deepest_channels, downsample=False,
-                                        local_response_norm=False)
+        outp_block = ProGANDownBlock(self.deepest_channels + 1, self.deepest_channels, downsample=False,
+                                        local_response_norm=False, progan_var_input=True)
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
@@ -168,8 +168,15 @@ class ProGANDiscriminator(torch.nn.Module):
             x2 = self.layers[n_downscales].from_rgb(x2)
 
             x = alpha * x1 + (1-alpha) * x2
+        x = F.leaky_relu(x)
 
         for i in range(n_downscales + 1):
+            if i == n_downscales:
+                # Apply the ProGAN mbatch stddev trick
+                stddevs = x.std(dim=0, keepdim=True)
+                stddev = stddevs.mean()
+                feature_map = torch.zeros_like(x[:, :1]) + stddev
+                x = torch.cat([x, feature_map], dim=1)
             layer = self.layers[n_downscales - i]
             x = layer(x)
 

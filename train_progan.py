@@ -9,32 +9,34 @@ import torch
 
 from models import ProGANDiscriminator, ProGANGenerator
 
-steps_per_phase = 500
-n_static_steps = 500
-batch_size = 32
-latent_size = 256
-h_size = 32
+steps_per_phase = 10000
+n_static_steps = 10000
+batch_size = 16
+latent_size = 32
+h_size = 8
 lr = 0.0001
+gamma = 750.0
 max_upscales = 4
 
 
 dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
                  transform=transforms.Compose([
-                     transforms.CenterCrop(64),
+                     transforms.CenterCrop(178),
+                     transforms.Resize(64),
                      transforms.ToTensor()
                  ])
                  )
 
 loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
-
+print(dataset[0][0].size())
 
 
 # Algo
-n_static_steps_taken = 0
-n_shifting_steps_taken = 0
+n_static_steps_taken = 10000
+n_shifting_steps_taken = 10000
 static = True
 
-G = ProGANGenerator(latent_size, max_upscales, 4)
+G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=False)
 D = ProGANDiscriminator(max_upscales, h_size)
 
 G = G.cuda()
@@ -42,6 +44,8 @@ D = D.cuda()
 
 G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.9))
 D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.9))
+
+first_print = True
 
 while True:
     for batch in loader:
@@ -57,7 +61,7 @@ while True:
         x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
 
         # =========== Train D ========
-        D.zero_grad()
+        D_opt.zero_grad()
 
         d_real_outputs = D(x, phase=phase)
 
@@ -78,20 +82,19 @@ while True:
         grad_outputs = torch.ones_like(dis_out)
         grad = torch.autograd.grad(dis_out, x_hat, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[0]
         grad_norm = grad.norm(2, dim=list(range(1, len(grad.size()))))
-        d_grad_loss = torch.pow(grad_norm - 1, 2).mean()
+        d_grad_loss = (torch.pow(grad_norm - gamma, 2)/(gamma**2)).mean()
 
         drift_loss = (d_real_outputs ** 2).mean() + (d_fake_outputs ** 2).mean()
-        d_loss = d_loss + 10.0 * d_grad_loss + 0.001 * drift_loss
-        d_loss = d_loss.mean()
+        d_loss_total = d_loss + 10.0 * d_grad_loss + 0.0001 * drift_loss
 
-        d_loss.backward()
+        d_loss_total.backward()
 
         # Update weights
         D_opt.step()
 
         # ======== Train G ========
         # Make gradients for G zero
-        G.zero_grad()
+        G_opt.zero_grad()
 
         # Generate a batch of fakes
         z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
@@ -113,10 +116,12 @@ while True:
             static = True
             switched = True
 
-        if switched:
-            if n_shifting_steps_taken == 0:
+        if (n_shifting_steps_taken + n_static_steps_taken)%1000 == 0:
+            if first_print:
                 torchvision.utils.save_image(x, "results/reals.png")
+                first_print = False
             print("D loss: ", d_loss.detach().cpu().item())
+            print("D loss total: ", d_loss_total.detach().cpu().item())
             print("G loss: ", g_loss.detach().cpu().item())
             print()
 
