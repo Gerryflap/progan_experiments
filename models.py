@@ -40,11 +40,12 @@ class ProGANUpBlock(torch.nn.Module):
 
 
 class ProGANGenerator(torch.nn.Module):
-    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True):
+    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
-        self.initial_size = output_h_size ** n_upscales
+        self.scaling_factor = scaling_factor
+        self.initial_size = int(output_h_size * self.scaling_factor ** (n_upscales))
         self.lrn = local_response_norm
 
         self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4)
@@ -54,8 +55,8 @@ class ProGANGenerator(torch.nn.Module):
 
         self.layer_list = []
         for i in range(n_upscales):
-            inp_channels = output_h_size ** (n_upscales - i)
-            outp_channels = output_h_size ** (n_upscales - i - 1)
+            inp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i))
+            outp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i - 1))
             self.layer_list.append(ProGANUpBlock(inp_channels, outp_channels, local_response_norm=local_response_norm))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
@@ -139,12 +140,13 @@ class ProGANDownBlock(torch.nn.Module):
 
 
 class ProGANDiscriminator(torch.nn.Module):
-    def __init__(self, n_downscales, full_res_h_size):
+    def __init__(self, n_downscales, full_res_h_size, scaling_factor=2):
         super().__init__()
         self.n_downscales = n_downscales
         self.h_size = full_res_h_size
+        self.scaling_factor = scaling_factor
 
-        self.deepest_channels = full_res_h_size * (2 ** (n_downscales))
+        self.deepest_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales)))
 
         self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
         self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, 1)
@@ -153,8 +155,8 @@ class ProGANDiscriminator(torch.nn.Module):
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
-            inp_channels = full_res_h_size * (2 ** (n_downscales - i - 1))
-            outp_channels = full_res_h_size * (2 ** (n_downscales - i))
+            inp_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1)))
+            outp_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales - i)))
             self.layer_list.append(ProGANDownBlock(inp_channels, outp_channels, local_response_norm=False))
         self.layers = torch.nn.ModuleList(self.layer_list)
 

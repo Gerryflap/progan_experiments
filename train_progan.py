@@ -20,6 +20,7 @@ def train(
         lr=0.001,
         gamma=750.0,
         max_upscales=4,
+        network_scaling_factor=2.0
 ):
     n_static_steps_taken = 0
     n_shifting_steps_taken = 0
@@ -27,8 +28,8 @@ def train(
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
 
-    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True)
-    D = ProGANDiscriminator(max_upscales, h_size)
+    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True, scaling_factor=network_scaling_factor)
+    D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
 
     G = G.cuda()
     D = D.cuda()
@@ -132,12 +133,13 @@ if __name__ == "__main__":
                      )
 
     train(dataset,
-          n_shifting_steps=20000,
-          n_static_steps=20000,
+          n_shifting_steps=5000,
+          n_static_steps=5000,
           batch_size=16,
-          latent_size=32,
-          h_size=8,
+          latent_size=256,
+          h_size=64,
           lr=0.001,
           gamma=750.0,
-          max_upscales=4
+          max_upscales=4,
+          network_scaling_factor=1.6
           )
