@@ -9,20 +9,19 @@ import torch
 
 from models import ProGANDiscriminator, ProGANGenerator
 
-steps_per_phase = 10000
-n_static_steps = 10000
+steps_per_phase = 20000
+n_static_steps = 20000
 batch_size = 16
 latent_size = 32
-h_size = 8
-lr = 0.0001
+h_size = 24
+lr = 0.001
 gamma = 750.0
-max_upscales = 4
+max_upscales = 5
 
 
 dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
                  transform=transforms.Compose([
                      transforms.CenterCrop(178),
-                     transforms.Resize(64),
                      transforms.ToTensor()
                  ])
                  )
@@ -32,18 +31,18 @@ print(dataset[0][0].size())
 
 
 # Algo
-n_static_steps_taken = 10000
-n_shifting_steps_taken = 10000
+n_static_steps_taken = 0
+n_shifting_steps_taken = 0
 static = True
 
-G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=False)
+G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True)
 D = ProGANDiscriminator(max_upscales, h_size)
 
 G = G.cuda()
 D = D.cuda()
 
-G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.9))
-D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.9))
+G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
+D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
 
 first_print = True
 
@@ -81,11 +80,11 @@ while True:
         dis_out = D(x_hat, phase=phase)
         grad_outputs = torch.ones_like(dis_out)
         grad = torch.autograd.grad(dis_out, x_hat, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[0]
-        grad_norm = grad.norm(2, dim=list(range(1, len(grad.size()))))
+        grad_norm = grad.norm(2, dim=list(range(1, len(grad.size()))))**2
         d_grad_loss = (torch.pow(grad_norm - gamma, 2)/(gamma**2)).mean()
 
         drift_loss = (d_real_outputs ** 2).mean() + (d_fake_outputs ** 2).mean()
-        d_loss_total = d_loss + 10.0 * d_grad_loss + 0.0001 * drift_loss
+        d_loss_total = d_loss + 10.0 * d_grad_loss + 0.001 * drift_loss
 
         d_loss_total.backward()
 

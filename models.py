@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from util import Conv2dNormalizedLR, local_response_normalization, LinearNormalizedLR
+from util import Conv2dNormalizedLR, local_response_normalization, LinearNormalizedLR, Conv2dTransposeNormalizedLR
 
 
 class ProGANUpBlock(torch.nn.Module):
@@ -13,8 +13,8 @@ class ProGANUpBlock(torch.nn.Module):
         self.input_channels = input_channels
         self.output_channels = output_channels
 
-        self.conv_1 = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_2 = Conv2dNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
+        self.conv_1 = Conv2dTransposeNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
+        self.conv_2 = Conv2dTransposeNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
         self.conv_rgb = Conv2dNormalizedLR(output_channels, 3, kernel_size=1)
         self.upsample = upsample
         self.lrn = local_response_norm
@@ -26,12 +26,12 @@ class ProGANUpBlock(torch.nn.Module):
         x = self.conv_1(x)
         if self.lrn:
             x = local_response_normalization(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         x = self.conv_2(x)
         if self.lrn:
             x = local_response_normalization(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         rgb = self.conv_rgb(x)
         rgb = torch.sigmoid(rgb)
@@ -48,8 +48,9 @@ class ProGANGenerator(torch.nn.Module):
         self.lrn = local_response_norm
 
         self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4)
-        self.init_block = ProGANUpBlock(self.initial_size, self.initial_size, upsample=False,
-                                        local_response_norm=local_response_norm)
+        self.init_layer = Conv2dTransposeNormalizedLR(self.initial_size, self.initial_size, kernel_size=3, padding=1)
+        self.init_rgb = Conv2dNormalizedLR(self.initial_size, 3, kernel_size=1)
+
 
         self.layer_list = []
         for i in range(n_upscales):
@@ -72,9 +73,15 @@ class ProGANGenerator(torch.nn.Module):
         x = x.view(-1, self.initial_size, 4, 4)
         if self.lrn:
             x = local_response_normalization(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
-        x, rgb = self.init_block(x)
+        x = self.init_layer(x)
+        if self.lrn:
+            x = local_response_normalization(x)
+        x = F.leaky_relu(x, 0.2)
+
+        rgb = self.init_rgb(x)
+        rgb = torch.sigmoid(rgb)
 
         if alpha == 0.0 and n_upscales == 0:
             return rgb
@@ -113,20 +120,21 @@ class ProGANDownBlock(torch.nn.Module):
         x = self.conv_1(x)
         if self.lrn:
             x = local_response_normalization(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         x = self.conv_2(x)
         if self.lrn:
             x = local_response_normalization(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         if self.downsample:
-            x = F.interpolate(x, scale_factor=0.5)
+            x = F.avg_pool2d(x, 2)
         return x
 
     def from_rgb(self, x):
         # Generated an input for this network from RGB
         x = self.conv_rgb(x)
+        x = F.leaky_relu(x, 0.2)
         return x
 
 
@@ -164,11 +172,10 @@ class ProGANDiscriminator(torch.nn.Module):
             x1 = self.layers[n_downscales + 1].from_rgb(x)
             x1 = self.layers[n_downscales + 1](x1)
 
-            x2 = F.interpolate(x, scale_factor=0.5)
+            x2 = F.avg_pool2d(x, 2)
             x2 = self.layers[n_downscales].from_rgb(x2)
 
             x = alpha * x1 + (1-alpha) * x2
-        x = F.leaky_relu(x)
 
         for i in range(n_downscales + 1):
             if i == n_downscales:
@@ -183,10 +190,10 @@ class ProGANDiscriminator(torch.nn.Module):
         x = x.view(-1, self.deepest_channels * 4 * 4)
 
         x = self.outp_layer_1(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         x = self.outp_layer_2(x)
-        x = F.leaky_relu(x)
+        x = F.leaky_relu(x, 0.2)
 
         return x
 
