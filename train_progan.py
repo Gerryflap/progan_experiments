@@ -2,128 +2,142 @@ import math
 
 import torchvision
 from torch.utils.data import DataLoader
-from torchvision.datasets import CelebA
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torch
 
 from models import ProGANDiscriminator, ProGANGenerator
 
-steps_per_phase = 20000
-n_static_steps = 20000
-batch_size = 16
-latent_size = 32
-h_size = 8
-lr = 0.001
-gamma = 750.0
-max_upscales = 5
-
-
-dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
-                 transform=transforms.Compose([
-                     transforms.CenterCrop(178),
-                     transforms.ToTensor()
-                 ])
-                 )
-
-loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
-print(dataset[0][0].size())
-
 
 # Algo
-n_static_steps_taken = 0
-n_shifting_steps_taken = 0
-static = True
+def train(
+        dataset,
+        n_shifting_steps=20000,
+        n_static_steps=20000,
+        batch_size=16,
+        latent_size=256,
+        h_size=8,
+        lr=0.001,
+        gamma=750.0,
+        max_upscales=5,
+):
+    n_static_steps_taken = 0
+    n_shifting_steps_taken = 0
+    static = True
 
-G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True)
-D = ProGANDiscriminator(max_upscales, h_size)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
 
-G = G.cuda()
-D = D.cuda()
+    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True)
+    D = ProGANDiscriminator(max_upscales, h_size)
 
-G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
-D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
+    G = G.cuda()
+    D = D.cuda()
 
-first_print = True
+    G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
+    D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
 
-while True:
-    for batch in loader:
-        if static:
-            n_static_steps_taken += 1
-        else:
-            n_shifting_steps_taken += 1
+    first_print = True
 
-        phase = min(n_shifting_steps_taken/steps_per_phase, max_upscales)
+    while True:
+        for batch in loader:
+            if static:
+                n_static_steps_taken += 1
+            else:
+                n_shifting_steps_taken += 1
 
-        x, _ = batch
-        x = x.cuda()
-        x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
+            phase = min(n_shifting_steps_taken / n_shifting_steps, max_upscales)
 
-        # =========== Train D ========
-        D_opt.zero_grad()
+            x, _ = batch
+            x = x.cuda()
+            x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
 
-        d_real_outputs = D(x, phase=phase)
+            # =========== Train D ========
+            D_opt.zero_grad()
 
-        z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-        fake_batch = G(z, phase=phase)
+            d_real_outputs = D(x, phase=phase)
 
-        # Compute outputs for fake images
-        d_fake_outputs = D(fake_batch, phase=phase)
+            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+            fake_batch = G(z, phase=phase)
 
-        # Compute losses
-        d_loss = (d_fake_outputs - d_real_outputs).mean()
+            # Compute outputs for fake images
+            d_fake_outputs = D(fake_batch, phase=phase)
 
-        size = [s if i == 0 else 1 for i, s in enumerate(fake_batch.size())]
-        eps = torch.rand(size).cuda()
-        x_hat = eps * x + (1.0 - eps) * fake_batch.detach()
-        x_hat.requires_grad = True
-        dis_out = D(x_hat, phase=phase)
-        grad_outputs = torch.ones_like(dis_out)
-        grad = torch.autograd.grad(dis_out, x_hat, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[0]
-        grad_norm = grad.norm(2, dim=list(range(1, len(grad.size()))))**2
-        d_grad_loss = (torch.pow(grad_norm - gamma, 2)/(gamma**2)).mean()
+            # Compute losses
+            d_loss = (d_fake_outputs - d_real_outputs).mean()
 
-        drift_loss = (d_real_outputs ** 2).mean() + (d_fake_outputs ** 2).mean()
-        d_loss_total = d_loss + 10.0 * d_grad_loss + 0.001 * drift_loss
+            size = [s if i == 0 else 1 for i, s in enumerate(fake_batch.size())]
+            eps = torch.rand(size).cuda()
+            x_hat = eps * x + (1.0 - eps) * fake_batch.detach()
+            x_hat.requires_grad = True
+            dis_out = D(x_hat, phase=phase)
+            grad_outputs = torch.ones_like(dis_out)
+            grad = torch.autograd.grad(dis_out, x_hat, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
+                0]
+            grad_norm = grad.norm(2, dim=list(range(1, len(grad.size())))) ** 2
+            d_grad_loss = (torch.pow(grad_norm - gamma, 2) / (gamma ** 2)).mean()
 
-        d_loss_total.backward()
+            drift_loss = (d_real_outputs ** 2).mean() + (d_fake_outputs ** 2).mean()
+            d_loss_total = d_loss + 10.0 * d_grad_loss + 0.001 * drift_loss
 
-        # Update weights
-        D_opt.step()
+            d_loss_total.backward()
 
-        # ======== Train G ========
-        # Make gradients for G zero
-        G_opt.zero_grad()
+            # Update weights
+            D_opt.step()
 
-        # Generate a batch of fakes
-        z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-        fake_batch = G(z, phase=phase)
+            # ======== Train G ========
+            # Make gradients for G zero
+            G_opt.zero_grad()
 
-        # Compute loss for G, images should become more 'real' to the discriminator
-        g_loss = -D(fake_batch, phase=phase).mean()
-        g_loss.backward()
+            # Generate a batch of fakes
+            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+            fake_batch = G(z, phase=phase)
 
-        G_opt.step()
+            # Compute loss for G, images should become more 'real' to the discriminator
+            g_loss = -D(fake_batch, phase=phase).mean()
+            g_loss.backward()
 
-        switched = False
-        if static and (n_static_steps_taken % n_static_steps == 0):
-            print("Switching to shift")
-            static = False
-            switched = True
-        elif (not static) and (n_shifting_steps_taken % steps_per_phase == 0):
-            print("Switching to static")
-            static = True
-            switched = True
+            G_opt.step()
 
-        if (n_shifting_steps_taken + n_static_steps_taken)%1000 == 0:
-            if first_print:
-                torchvision.utils.save_image(x, "results/reals.png")
-                first_print = False
-            print("D loss: ", d_loss.detach().cpu().item())
-            print("D loss total: ", d_loss_total.detach().cpu().item())
-            print("G loss: ", g_loss.detach().cpu().item())
-            print()
+            switched = False
+            if static and (n_static_steps_taken % n_static_steps == 0):
+                print("Switching to shift")
+                static = False
+                switched = True
+            elif (not static) and (n_shifting_steps_taken % n_shifting_steps == 0):
+                print("Switching to static")
+                static = True
+                switched = True
 
-            # with open("results/results_%d_%d_%.3f.png"%(n_static_steps_taken, n_shifting_steps_taken, phase), "w") as f:
-            #     torchvision.utils.save_image(fake_batch, f)
-            torchvision.utils.save_image(fake_batch, "results/results_%d_%d_%.3f.png"%(n_static_steps_taken, n_shifting_steps_taken, phase))
+            if (n_shifting_steps_taken + n_static_steps_taken) % 1000 == 0:
+                if first_print:
+                    torchvision.utils.save_image(x, "results/reals.png")
+                    first_print = False
+                print("D loss: ", d_loss.detach().cpu().item())
+                print("D loss total: ", d_loss_total.detach().cpu().item())
+                print("G loss: ", g_loss.detach().cpu().item())
+                print()
+
+                torchvision.utils.save_image(fake_batch, "results/results_%d_%d_%.3f.png" % (
+                    n_static_steps_taken, n_shifting_steps_taken, phase))
+
+
+if __name__ == "__main__":
+    from torchvision.datasets import CelebA
+    dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
+                     transform=transforms.Compose([
+                         transforms.CenterCrop(178),
+                         transforms.Resize(128),
+                         transforms.ToTensor()
+                     ])
+                     )
+
+    train(dataset,
+          n_shifting_steps=20000,
+          n_static_steps=20000,
+          batch_size=16,
+          latent_size=32,
+          h_size=4,
+          lr=0.001,
+          gamma=750.0,
+          max_upscales=5
+          )
