@@ -19,7 +19,7 @@ def train(
         h_size=8,
         lr=0.001,
         gamma=750.0,
-        max_upscales=5,
+        max_upscales=4,
 ):
     n_static_steps_taken = 0
     n_shifting_steps_taken = 0
@@ -136,8 +136,8 @@ if __name__ == "__main__":
           n_static_steps=20000,
           batch_size=16,
           latent_size=32,
-          h_size=4,
+          h_size=8,
           lr=0.001,
           gamma=750.0,
-          max_upscales=5
+          max_upscales=4
           )
