@@ -23,7 +23,8 @@ def train(
         network_scaling_factor=2.0,
         lrn_in_G=True,
         start_at=0,
-        num_workers=1
+        num_workers=1,
+        progress_bar=False
 ):
     if num_workers == 1:
         print("Using num_workers = 1. It might be useful to add more workers if your machine allows for it.")
@@ -116,6 +117,10 @@ def train(
                 static = True
                 switched = True
 
+            if progress_bar:
+                percent = ((n_shifting_steps_taken + n_static_steps_taken)%1000)/10.0
+                print("%03d %% till image generation...\r" % int(percent))
+
             if (n_shifting_steps_taken + n_static_steps_taken) % 1000 == 0:
                 if first_print:
                     torchvision.utils.save_image(x, "results/reals.png")
@@ -158,5 +163,6 @@ if __name__ == "__main__":
           max_upscales=4,
           network_scaling_factor=1.5,
           lrn_in_G=False,
-          start_at=0
+          start_at=0,
+          progress_bar=True
           )
