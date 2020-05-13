@@ -6,7 +6,6 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torch
 
-from frgc_cropped import FRGCCropped
 from models import ProGANDiscriminator, ProGANGenerator
 
 
@@ -23,13 +22,16 @@ def train(
         max_upscales=4,
         network_scaling_factor=2.0,
         lrn_in_G=True,
-        start_at=0
+        start_at=0,
+        num_workers=1
 ):
+    if num_workers == 1:
+        print("Using num_workers = 1. It might be useful to add more workers if your machine allows for it.")
     n_static_steps_taken = start_at
     n_shifting_steps_taken = start_at
     static = True
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
 
     G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
     D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
@@ -138,6 +140,7 @@ if __name__ == "__main__":
     #                  ])
     #                  )
 
+    from frgc_cropped import FRGCCropped
     dataset = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
                      transform=transforms.Compose([
                          transforms.ToTensor()
