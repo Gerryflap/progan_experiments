@@ -20,15 +20,17 @@ def train(
         lr=0.001,
         gamma=750.0,
         max_upscales=4,
-        network_scaling_factor=2.0
+        network_scaling_factor=2.0,
+        lrn_in_G=True,
+        start_at=0
 ):
-    n_static_steps_taken = 0
-    n_shifting_steps_taken = 0
+    n_static_steps_taken = start_at
+    n_shifting_steps_taken = start_at
     static = True
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
 
-    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=True, scaling_factor=network_scaling_factor)
+    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
     D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
 
     G = G.cuda()
@@ -38,6 +40,8 @@ def train(
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
 
     first_print = True
+
+    test_z = torch.normal(0, 1, (16, latent_size), device="cuda")
 
     while True:
         for batch in loader:
@@ -118,7 +122,8 @@ def train(
                 print("G loss: ", g_loss.detach().cpu().item())
                 print()
 
-                torchvision.utils.save_image(fake_batch, "results/results_%d_%d_%.3f.png" % (
+                test_batch = G(test_z, phase=phase)
+                torchvision.utils.save_image(test_batch, "results/results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase))
 
 
@@ -133,13 +138,15 @@ if __name__ == "__main__":
                      )
 
     train(dataset,
-          n_shifting_steps=5000,
-          n_static_steps=5000,
+          n_shifting_steps=4000,
+          n_static_steps=4000,
           batch_size=16,
           latent_size=256,
-          h_size=64,
+          h_size=32,
           lr=0.001,
           gamma=750.0,
           max_upscales=4,
-          network_scaling_factor=1.6
+          network_scaling_factor=1.4,
+          lrn_in_G=False,
+          start_at=0
           )
