@@ -23,16 +23,17 @@ def train(
         network_scaling_factor=2.0,
         lrn_in_G=True,
         start_at=0,
-        num_workers=1,
-        progress_bar=False
+        num_workers=0,
+        progress_bar=False,
+        shuffle=True
 ):
-    if num_workers == 1:
-        print("Using num_workers = 1. It might be useful to add more workers if your machine allows for it.")
+    if num_workers == 0:
+        print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
     n_static_steps_taken = start_at
     n_shifting_steps_taken = start_at
     static = True
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=True)
 
     G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
     D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
