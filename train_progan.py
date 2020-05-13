@@ -6,6 +6,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torch
 
+from frgc_cropped import FRGCCropped
 from models import ProGANDiscriminator, ProGANGenerator
 
 
@@ -129,10 +130,16 @@ def train(
 
 if __name__ == "__main__":
     from torchvision.datasets import CelebA
-    dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
+    # dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
+    #                  transform=transforms.Compose([
+    #                      transforms.CenterCrop(178),
+    #                      transforms.Resize(128),
+    #                      transforms.ToTensor()
+    #                  ])
+    #                  )
+
+    dataset = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
                      transform=transforms.Compose([
-                         transforms.CenterCrop(178),
-                         transforms.Resize(128),
                          transforms.ToTensor()
                      ])
                      )
@@ -142,11 +149,11 @@ if __name__ == "__main__":
           n_static_steps=4000,
           batch_size=16,
           latent_size=256,
-          h_size=32,
+          h_size=4,
           lr=0.001,
           gamma=750.0,
           max_upscales=4,
-          network_scaling_factor=1.4,
+          network_scaling_factor=1.5,
           lrn_in_G=False,
           start_at=0
           )
