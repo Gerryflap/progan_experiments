@@ -120,7 +120,7 @@ def train(
                 switched = True
 
             if progress_bar:
-                percent = ((n_shifting_steps_taken + n_static_steps_taken)%n_steps_per_output)/10.0
+                percent = ((n_shifting_steps_taken + n_static_steps_taken)%n_steps_per_output)/(n_steps_per_output/100.0)
                 print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
 
             if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
