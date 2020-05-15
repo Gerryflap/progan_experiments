@@ -170,6 +170,6 @@ if __name__ == "__main__":
           lrn_in_G=True,
           start_at=0,
           progress_bar=True,
-          num_workers=4
+          num_workers=4,
           n_steps_per_output=5000
           )
