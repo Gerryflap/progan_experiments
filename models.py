@@ -52,7 +52,6 @@ class ProGANGenerator(torch.nn.Module):
         self.init_layer = Conv2dTransposeNormalizedLR(self.initial_size, self.initial_size, kernel_size=3, padding=1)
         self.init_rgb = Conv2dNormalizedLR(self.initial_size, 3, kernel_size=1)
 
-
         self.layer_list = []
         for i in range(n_upscales):
             inp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i))
@@ -105,28 +104,39 @@ class ProGANGenerator(torch.nn.Module):
 
 
 class ProGANDownBlock(torch.nn.Module):
-    def __init__(self, input_channels, output_channels, downsample=True, local_response_norm=False, progan_var_input=False):
+    def __init__(self, input_channels, output_channels, downsample=True, local_response_norm=False,
+                 progan_var_input=False, last_layer=False):
         super().__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.progran_var_input = progan_var_input
+        self.last_layer = last_layer
 
-        self.conv_1 = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_2 = Conv2dNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_rgb = Conv2dNormalizedLR(3, (input_channels - 1) if progan_var_input else input_channels, kernel_size=1)
+        self.conv_1 = Conv2dNormalizedLR(input_channels + (1 if progan_var_input else 0), output_channels,
+                                         kernel_size=3, padding=1)
+        if not self.last_layer:
+            self.conv_2 = Conv2dNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
+        self.conv_rgb = Conv2dNormalizedLR(3, input_channels, kernel_size=1)
         self.downsample = downsample
         self.lrn = local_response_norm
 
     def forward(self, x):
+        if self.progran_var_input:
+            # Apply the ProGAN mbatch stddev trick
+            stddevs = x.std(dim=0, keepdim=True)
+            stddev = stddevs.mean()
+            feature_map = torch.zeros_like(x[:, :1]) + stddev
+            x = torch.cat([x, feature_map], dim=1)
         x = self.conv_1(x)
         if self.lrn:
             x = local_response_normalization(x)
         x = F.leaky_relu(x, 0.2)
 
-        x = self.conv_2(x)
-        if self.lrn:
-            x = local_response_normalization(x)
-        x = F.leaky_relu(x, 0.2)
+        if not self.last_layer:
+            x = self.conv_2(x)
+            if self.lrn:
+                x = local_response_normalization(x)
+            x = F.leaky_relu(x, 0.2)
 
         if self.downsample:
             x = F.avg_pool2d(x, 2)
@@ -150,8 +160,8 @@ class ProGANDiscriminator(torch.nn.Module):
 
         self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
         self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, 1)
-        outp_block = ProGANDownBlock(self.deepest_channels + 1, self.deepest_channels, downsample=False,
-                                        local_response_norm=False, progan_var_input=True)
+        outp_block = ProGANDownBlock(self.deepest_channels, self.deepest_channels, downsample=False,
+                                     local_response_norm=False, progan_var_input=True, last_layer=True)
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
@@ -159,7 +169,6 @@ class ProGANDiscriminator(torch.nn.Module):
             outp_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales - i)))
             self.layer_list.append(ProGANDownBlock(inp_channels, outp_channels, local_response_norm=False))
         self.layers = torch.nn.ModuleList(self.layer_list)
-
 
     def forward(self, x, phase=None):
         if phase is None:
@@ -177,15 +186,9 @@ class ProGANDiscriminator(torch.nn.Module):
             x2 = F.avg_pool2d(x, 2)
             x2 = self.layers[n_downscales].from_rgb(x2)
 
-            x = alpha * x1 + (1-alpha) * x2
+            x = alpha * x1 + (1 - alpha) * x2
 
-        for i in range(n_downscales + 1):
-            if i == n_downscales:
-                # Apply the ProGAN mbatch stddev trick
-                stddevs = x.std(dim=0, keepdim=True)
-                stddev = stddevs.mean()
-                feature_map = torch.zeros_like(x[:, :1]) + stddev
-                x = torch.cat([x, feature_map], dim=1)
+        for i in range(0, n_downscales + 1):
             layer = self.layers[n_downscales - i]
             x = layer(x)
 
