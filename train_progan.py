@@ -25,7 +25,8 @@ def train(
         start_at=0,
         num_workers=0,
         progress_bar=False,
-        shuffle=True
+        shuffle=True,
+        n_steps_per_output=1000
 ):
     if num_workers == 0:
         print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
@@ -119,10 +120,10 @@ def train(
                 switched = True
 
             if progress_bar:
-                percent = ((n_shifting_steps_taken + n_static_steps_taken)%1000)/10.0
+                percent = ((n_shifting_steps_taken + n_static_steps_taken)%n_steps_per_output)/10.0
                 print("%03d %% till image generation...\r" % int(percent))
 
-            if (n_shifting_steps_taken + n_static_steps_taken) % 1000 == 0:
+            if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
                 if first_print:
                     torchvision.utils.save_image(x, "results/reals.png")
                     first_print = False
@@ -134,6 +135,9 @@ def train(
                 test_batch = G(test_z, phase=phase)
                 torchvision.utils.save_image(test_batch, "results/results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase))
+
+                torch.save(G, "G.pt")
+                torch.save(D, "D.pt")
 
 
 if __name__ == "__main__":
@@ -165,5 +169,6 @@ if __name__ == "__main__":
           network_scaling_factor=1.0,
           lrn_in_G=True,
           start_at=0,
-          progress_bar=True
+          progress_bar=True,
+          n_steps_per_output=5000
           )
