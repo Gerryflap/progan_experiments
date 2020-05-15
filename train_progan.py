@@ -154,16 +154,16 @@ if __name__ == "__main__":
                      )
 
     train(dataset,
-          n_shifting_steps=4000,
-          n_static_steps=4000,
+          n_shifting_steps=60000,
+          n_static_steps=60000,
           batch_size=16,
-          latent_size=256,
-          h_size=4,
+          latent_size=128,
+          h_size=256,
           lr=0.001,
           gamma=750.0,
           max_upscales=4,
-          network_scaling_factor=1.5,
-          lrn_in_G=False,
+          network_scaling_factor=1.0,
+          lrn_in_G=True,
           start_at=0,
           progress_bar=True
           )
