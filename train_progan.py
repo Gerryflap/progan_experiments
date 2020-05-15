@@ -142,16 +142,16 @@ def train(
 
 if __name__ == "__main__":
     from torchvision.datasets import CelebA
-    # dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
-    #                  transform=transforms.Compose([
-    #                      transforms.CenterCrop(178),
-    #                      transforms.Resize(128),
-    #                      transforms.ToTensor()
-    #                  ])
-    #                  )
+    dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
+                     transform=transforms.Compose([
+                         transforms.CenterCrop(178),
+                         transforms.Resize(128),
+                         transforms.ToTensor()
+                     ])
+                     )
 
     from frgc_cropped import FRGCCropped
-    dataset = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
+    dataset2 = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
                      transform=transforms.Compose([
                          transforms.ToTensor()
                      ])
@@ -170,9 +170,6 @@ if __name__ == "__main__":
           lrn_in_G=True,
           start_at=0,
           progress_bar=True,
-<<<<<<< HEAD
           num_workers=4
-=======
           n_steps_per_output=5000
->>>>>>> 35b54be757005e7852b82f9c8e128ae2dc492703
           )
