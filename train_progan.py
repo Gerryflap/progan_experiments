@@ -215,5 +215,5 @@ if __name__ == "__main__":
           n_steps_per_output=1000,
           use_special_output_network=True,
           use_additive_net=False,
-          occasional_regularization=True
+          occasional_regularization=False
           )
