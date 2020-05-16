@@ -6,6 +6,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torch
 
+import util
 from models import ProGANDiscriminator, ProGANGenerator
 
 
@@ -26,7 +27,8 @@ def train(
         num_workers=0,
         progress_bar=False,
         shuffle=True,
-        n_steps_per_output=1000
+        n_steps_per_output=1000,
+        use_special_output_network=False    # When true: use exponential running avg of weights for G output
 ):
     if num_workers == 0:
         print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
@@ -41,6 +43,14 @@ def train(
 
     G = G.cuda()
     D = D.cuda()
+
+    if use_special_output_network:
+        G_out = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
+        G_out = G_out.cuda()
+        # Set the weights of G_out to those of G
+        util.update_output_network(G_out, G, factor=0.0)
+    else:
+        G_out = G
 
     G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
@@ -109,6 +119,10 @@ def train(
 
             G_opt.step()
 
+            if use_special_output_network:
+                util.update_output_network(G_out, G)
+
+
             switched = False
             if static and (n_static_steps_taken % n_static_steps == 0):
                 print("Switching to shift")
@@ -171,5 +185,6 @@ if __name__ == "__main__":
           start_at=0,
           progress_bar=True,
           num_workers=4,
-          n_steps_per_output=1000
+          n_steps_per_output=1000,
+          use_special_output_network=True
           )

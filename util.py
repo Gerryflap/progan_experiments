@@ -125,3 +125,8 @@ class LocalResponseNorm(torch.nn.Module):
 
     def forward(self, inp):
         return local_response_normalization(inp, self.eps)
+
+
+def update_output_network(G_out, G, factor=0.999):
+    for (p_out, p_train) in zip(G_out.parameters(), G.parameters()):
+        p_out.data = p_out.data * factor + p_train.data * (1.0 - factor)
