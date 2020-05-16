@@ -81,7 +81,6 @@ class ProGANGenerator(torch.nn.Module):
         x = F.leaky_relu(x, 0.2)
 
         rgb = self.init_rgb(x)
-        rgb = torch.sigmoid(rgb)
 
         if alpha == 0.0 and n_upscales == 0:
             return rgb

@@ -9,8 +9,10 @@ import torch
 import util
 from models import ProGANDiscriminator, ProGANGenerator
 
-
 # Algo
+from models_additional import ProGANAdditiveGenerator
+
+
 def train(
         dataset,
         n_shifting_steps=20000,
@@ -28,7 +30,8 @@ def train(
         progress_bar=False,
         shuffle=True,
         n_steps_per_output=1000,
-        use_special_output_network=False    # When true: use exponential running avg of weights for G output
+        use_special_output_network=False,  # When true: use exponential running avg of weights for G output
+        use_additive_net=False
 ):
     if num_workers == 0:
         print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
@@ -38,14 +41,25 @@ def train(
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=True)
 
-    G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
+    if use_additive_net:
+        G = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
+                                    scaling_factor=network_scaling_factor)
+    else:
+        G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
+                            scaling_factor=network_scaling_factor)
+
     D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
 
     G = G.cuda()
     D = D.cuda()
 
     if use_special_output_network:
-        G_out = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G, scaling_factor=network_scaling_factor)
+        if use_additive_net:
+            G_out = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
+                                            scaling_factor=network_scaling_factor)
+        else:
+            G_out = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
+                                    scaling_factor=network_scaling_factor)
         G_out = G_out.cuda()
         # Set the weights of G_out to those of G
         util.update_output_network(G_out, G, factor=0.0)
@@ -122,7 +136,6 @@ def train(
             if use_special_output_network:
                 util.update_output_network(G_out, G)
 
-
             switched = False
             if static and (n_static_steps_taken % n_static_steps == 0):
                 print("Switching to shift")
@@ -134,7 +147,8 @@ def train(
                 switched = True
 
             if progress_bar:
-                percent = ((n_shifting_steps_taken + n_static_steps_taken)%n_steps_per_output)/(n_steps_per_output/100.0)
+                percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
+                            n_steps_per_output / 100.0)
                 print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
 
             if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
@@ -157,6 +171,7 @@ def train(
 
 if __name__ == "__main__":
     from torchvision.datasets import CelebA
+
     dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
                      transform=transforms.Compose([
                          transforms.CenterCrop(178),
@@ -166,11 +181,12 @@ if __name__ == "__main__":
                      )
 
     from frgc_cropped import FRGCCropped
+
     dataset2 = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
-                     transform=transforms.Compose([
-                         transforms.ToTensor()
-                     ])
-                     )
+                           transform=transforms.Compose([
+                               transforms.ToTensor()
+                           ])
+                           )
 
     train(dataset,
           n_shifting_steps=5000,
