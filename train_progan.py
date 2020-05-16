@@ -203,5 +203,6 @@ if __name__ == "__main__":
           progress_bar=True,
           num_workers=4,
           n_steps_per_output=1000,
-          use_special_output_network=True
+          use_special_output_network=True,
+          use_additive_net=True
           )
