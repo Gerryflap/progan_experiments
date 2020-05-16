@@ -116,10 +116,13 @@ class ProGANDownBlock(torch.nn.Module):
         self.progran_var_input = progan_var_input
         self.last_layer = last_layer
 
-        self.conv_1 = Conv2dNormalizedLR(input_channels + (1 if progan_var_input else 0), output_channels,
+        conv_1_input_channels = input_channels + (1 if progan_var_input else 0)
+        # According to the ProGAN paper appendix, the "hidden" number of channels should be the same as the input size
+        conv_1_output_channels = output_channels if self.last_layer else input_channels
+        self.conv_1 = Conv2dNormalizedLR(conv_1_input_channels, conv_1_output_channels,
                                          kernel_size=3, padding=1)
         if not self.last_layer:
-            self.conv_2 = Conv2dNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
+            self.conv_2 = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
         self.conv_rgb = Conv2dNormalizedLR(3, input_channels, kernel_size=1)
         self.downsample = downsample
         self.lrn = local_response_norm
