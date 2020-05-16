@@ -198,18 +198,31 @@ class ProGANDiscriminator(torch.nn.Module):
         x = F.leaky_relu(x, 0.2)
 
         x = self.outp_layer_2(x)
-        x = F.leaky_relu(x, 0.2)
 
         return x
 
 
 if __name__ == "__main__":
-    G = ProGANGenerator(256, 4, 4)
-    D = ProGANDiscriminator(4, 4)
+    def compute_n_params(model):
+        total = 0
+        for p in model.parameters():
+            n_params = 1
+            for d in p.size():
+                n_params *= d
+            total += n_params
+        return total
+
+
+    G = ProGANGenerator(128, 4, 256, scaling_factor=1)
+    D = ProGANDiscriminator(4, 256, scaling_factor=1)
 
     for phase in [0, 0.5, 1, 2, 3, 3.5, 4]:
-        z = torch.normal(0, 1, (1, 256))
+        z = torch.normal(0, 1, (1, 128))
         x_gen = G(z, phase=phase)
         print("G out: ", x_gen.size())
         d_out = D(x_gen, phase=phase)
         print(d_out.size())
+
+    print("G_params: ", compute_n_params(G))
+    print("D_params: ", compute_n_params(D))
+
