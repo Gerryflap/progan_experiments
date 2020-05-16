@@ -59,6 +59,11 @@ class ProGANAdditiveGenerator(torch.nn.Module):
         self.layers = torch.nn.ModuleList(self.layer_list)
 
     def forward(self, x, phase=None):
+
+        # Project latent vectors onto hypersphere
+        x_divisor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True)) + 1e-8
+        x = x/x_divisor
+
         if phase is None:
             phase = self.n_upscales
 
@@ -85,7 +90,7 @@ class ProGANAdditiveGenerator(torch.nn.Module):
             return torch.sigmoid(rgb)
 
         next_x, next_rgb = self.layers[0](x)
-        next_rgb = F.interpolate(rgb, scale_factor=2) + next_rgb
+        next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
 
         n_actual_upscales = n_upscales
         if 0 < alpha < 1:
@@ -94,11 +99,11 @@ class ProGANAdditiveGenerator(torch.nn.Module):
         for i in range(1, min(self.n_upscales, n_actual_upscales)):
             x, rgb = next_x,  next_rgb
             next_x, next_rgb = self.layers[i](x)
-            next_rgb = F.interpolate(rgb, scale_factor=2) + next_rgb
+            next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
 
         if alpha == 1.0 and n_upscales > 0:
-            return torch.sigmoid(F.interpolate(rgb, scale_factor=2) + next_rgb)
+            return torch.sigmoid(F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb)
 
-        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2) + alpha * next_rgb
+        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2, mode="bicubic") + alpha * next_rgb
         return torch.sigmoid(out_rgb)
 

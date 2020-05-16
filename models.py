@@ -62,7 +62,7 @@ class ProGANGenerator(torch.nn.Module):
 
     def forward(self, x, phase=None):
         if self.hypersphere_latent:
-            x_divisor = torch.sqrt(torch.sum(x**2, dim=1)) + 1e-8
+            x_divisor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True)) + 1e-8
             x = x/x_divisor
 
         if phase is None:
