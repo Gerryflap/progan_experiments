@@ -158,8 +158,8 @@ if __name__ == "__main__":
                      )
 
     train(dataset,
-          n_shifting_steps=60000,
-          n_static_steps=60000,
+          n_shifting_steps=5000,
+          n_static_steps=5000,
           batch_size=16,
           latent_size=128,
           h_size=256,
@@ -171,5 +171,5 @@ if __name__ == "__main__":
           start_at=0,
           progress_bar=True,
           num_workers=4,
-          n_steps_per_output=5000
+          n_steps_per_output=1000
           )
