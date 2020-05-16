@@ -59,7 +59,9 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
         super().__init__()
         self.stride = stride
         self.padding = padding
-        self.he_constant = (2.0/float(in_channels))**0.5
+        # In the ProGAN source code the kernel**2 is also included.
+        # I don't understand why, since the input of conv2d transpose is 1x1 as far as I'm aware, but okay.
+        self.he_constant = (2.0/float(in_channels * kernel_size * kernel_size))**0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(in_channels, out_channels, kernel_size, kernel_size))
 

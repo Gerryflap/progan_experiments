@@ -172,7 +172,7 @@ class ProGANDiscriminator(torch.nn.Module):
 
     def forward(self, x, phase=None):
         if phase is None:
-            phase = self.n_upscales
+            phase = self.n_downscales
 
         n_downscales = min(int(phase), self.n_downscales)
         alpha = phase - n_downscales
