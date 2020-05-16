@@ -146,11 +146,12 @@ def train(
                 print("G loss: ", g_loss.detach().cpu().item())
                 print()
 
-                test_batch = G(test_z, phase=phase)
+                test_batch = G_out(test_z, phase=phase)
                 torchvision.utils.save_image(test_batch, "results/results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase))
 
                 torch.save(G, "G.pt")
+                torch.save(G_out, "G_out.pt")
                 torch.save(D, "D.pt")
 
 
