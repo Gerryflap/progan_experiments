@@ -40,13 +40,14 @@ class ProGANUpBlock(torch.nn.Module):
 
 
 class ProGANGenerator(torch.nn.Module):
-    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2):
+    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2, hypersphere_latent=True):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
         self.scaling_factor = scaling_factor
         self.initial_size = int(output_h_size * self.scaling_factor ** (n_upscales))
         self.lrn = local_response_norm
+        self.hypersphere_latent = hypersphere_latent
 
         self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4)
         self.init_layer = Conv2dTransposeNormalizedLR(self.initial_size, self.initial_size, kernel_size=3, padding=1)
@@ -60,6 +61,10 @@ class ProGANGenerator(torch.nn.Module):
         self.layers = torch.nn.ModuleList(self.layer_list)
 
     def forward(self, x, phase=None):
+        if self.hypersphere_latent:
+            x_divisor = torch.sqrt(torch.sum(x**2, dim=1)) + 1e-8
+            x = x/x_divisor
+
         if phase is None:
             phase = self.n_upscales
 
