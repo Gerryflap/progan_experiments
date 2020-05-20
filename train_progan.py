@@ -199,14 +199,14 @@ if __name__ == "__main__":
                            )
 
     train(dataset,
-          n_shifting_steps=10000,
-          n_static_steps=10000,
+          n_shifting_steps=5000,
+          n_static_steps=5000,
           batch_size=16,
-          latent_size=128,
+          latent_size=256,
           h_size=8,
-          lr=0.001,
+          lr=0.01,
           gamma=750.0,
-          max_upscales=4,
+          max_upscales=5,
           network_scaling_factor=2.0,
           lrn_in_G=True,
           start_at=0,
@@ -214,6 +214,6 @@ if __name__ == "__main__":
           num_workers=4,
           n_steps_per_output=1000,
           use_special_output_network=True,
-          use_additive_net=False,
-          occasional_regularization=False
+          use_additive_net=True,
+          occasional_regularization=False,
           )
