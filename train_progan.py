@@ -32,8 +32,11 @@ def train(
         n_steps_per_output=1000,
         use_special_output_network=False,  # When true: use exponential running avg of weights for G output
         use_additive_net=False,            # Use a network that adds the output of rgb layers together
-        occasional_regularization=False    # Only apply regularization every 10 steps, but 10x as strongly
+        occasional_regularization=False,    # Only apply regularization every 10 steps, but 10x as strongly
+        max_h_size=None                     # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite
 ):
+    if max_h_size is None:
+        max_h_size = int(1e10)
     if num_workers == 0:
         print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
     n_static_steps_taken = start_at
@@ -44,12 +47,12 @@ def train(
 
     if use_additive_net:
         G = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                    scaling_factor=network_scaling_factor)
+                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size)
     else:
         G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                            scaling_factor=network_scaling_factor)
+                            scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
-    D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor)
+    D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
     G = G.cuda()
     D = D.cuda()
@@ -57,10 +60,10 @@ def train(
     if use_special_output_network:
         if use_additive_net:
             G_out = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                            scaling_factor=network_scaling_factor)
+                                            scaling_factor=network_scaling_factor, max_h_size=max_h_size)
         else:
             G_out = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                    scaling_factor=network_scaling_factor)
+                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size)
         G_out = G_out.cuda()
         # Set the weights of G_out to those of G
         util.update_output_network(G_out, G, factor=0.0)
@@ -216,4 +219,5 @@ if __name__ == "__main__":
           use_special_output_network=True,
           use_additive_net=True,
           occasional_regularization=False,
+          max_h_size=512
           )

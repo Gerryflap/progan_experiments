@@ -39,12 +39,12 @@ class ProGANUpBlock(torch.nn.Module):
 
 
 class ProGANAdditiveGenerator(torch.nn.Module):
-    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2):
+    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2, max_h_size: int = 1e10):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
         self.scaling_factor = scaling_factor
-        self.initial_size = int(output_h_size * self.scaling_factor ** (n_upscales))
+        self.initial_size = min(int(output_h_size * self.scaling_factor ** (n_upscales)), max_h_size)
         self.lrn = local_response_norm
 
         self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4)
@@ -53,8 +53,8 @@ class ProGANAdditiveGenerator(torch.nn.Module):
 
         self.layer_list = []
         for i in range(n_upscales):
-            inp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i))
-            outp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i - 1))
+            inp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i)), max_h_size)
+            outp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i - 1)), max_h_size)
             self.layer_list.append(ProGANUpBlock(inp_channels, outp_channels, local_response_norm=local_response_norm))
         self.layers = torch.nn.ModuleList(self.layer_list)
 

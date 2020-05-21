@@ -40,12 +40,13 @@ class ProGANUpBlock(torch.nn.Module):
 
 
 class ProGANGenerator(torch.nn.Module):
-    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2, hypersphere_latent=True):
+    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2,
+                 hypersphere_latent=True, max_h_size: int = 1e10):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
         self.scaling_factor = scaling_factor
-        self.initial_size = int(output_h_size * self.scaling_factor ** (n_upscales))
+        self.initial_size = min(int(output_h_size * self.scaling_factor ** (n_upscales)), max_h_size)
         self.lrn = local_response_norm
         self.hypersphere_latent = hypersphere_latent
 
@@ -55,15 +56,15 @@ class ProGANGenerator(torch.nn.Module):
 
         self.layer_list = []
         for i in range(n_upscales):
-            inp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i))
-            outp_channels = int(output_h_size * self.scaling_factor ** (n_upscales - i - 1))
+            inp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i)), max_h_size)
+            outp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i - 1)), max_h_size)
             self.layer_list.append(ProGANUpBlock(inp_channels, outp_channels, local_response_norm=local_response_norm))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
     def forward(self, x, phase=None):
         if self.hypersphere_latent:
-            x_divisor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True)) + 1e-8
-            x = x/x_divisor
+            x_divisor = torch.sqrt(torch.sum(x ** 2, dim=1, keepdim=True)) + 1e-8
+            x = x / x_divisor
 
         if phase is None:
             phase = self.n_upscales
@@ -157,13 +158,13 @@ class ProGANDownBlock(torch.nn.Module):
 
 
 class ProGANDiscriminator(torch.nn.Module):
-    def __init__(self, n_downscales, full_res_h_size, scaling_factor=2):
+    def __init__(self, n_downscales, full_res_h_size, scaling_factor=2, max_h_size: int = 1e10):
         super().__init__()
         self.n_downscales = n_downscales
         self.h_size = full_res_h_size
         self.scaling_factor = scaling_factor
 
-        self.deepest_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales)))
+        self.deepest_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales))), max_h_size)
 
         self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
         self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, 1)
@@ -172,8 +173,8 @@ class ProGANDiscriminator(torch.nn.Module):
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
-            inp_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1)))
-            outp_channels = int(full_res_h_size * (self.scaling_factor ** (n_downscales - i)))
+            inp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1))), max_h_size)
+            outp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i))), max_h_size)
             self.layer_list.append(ProGANDownBlock(inp_channels, outp_channels, local_response_norm=False))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
@@ -232,4 +233,3 @@ if __name__ == "__main__":
 
     print("G_params: ", compute_n_params(G))
     print("D_params: ", compute_n_params(D))
-
