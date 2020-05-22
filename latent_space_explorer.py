@@ -25,6 +25,8 @@ generator.eval()
 print(generator.inp_layer)
 
 z_shape = int(generator.inp_layer.weight.data.size(1))
+max_phase = generator.n_upscales
+phase = max_phase
 z = np.zeros((1, z_shape), dtype=np.float32)
 
 
@@ -80,7 +82,7 @@ def update_canvas(iets):
     for i in range(len(sliders)):
         z[0, i] = sliders[i].get()
     # array = G(z).eval(session=K.get_session())[0]
-    array = generator(torch.from_numpy(z))[0]
+    array = generator(torch.from_numpy(z), phase=phase)[0]
     if array.min().detach().item() < 0:
         array = (array + 1) / 2
     array *= 255.0
@@ -98,6 +100,12 @@ def update_canvas(iets):
     image = img
     canvas.create_image(0, 0, anchor="nw", image=image)
 
+def phase_switch(iets):
+    global phase
+    phase = phase_slider.get()
+    update_canvas(iets)
+
+
 root = tk.Tk()
 root.title("GAN tool")
 root.attributes('-type', 'dialog')
@@ -105,6 +113,10 @@ root.attributes('-type', 'dialog')
 left_frame = tk.Frame()
 canvas = tk.Canvas(left_frame, width=200, height=200)
 canvas.pack()
+
+phase_slider = tk.Scale(root, from_=0, to_=max_phase, resolution=0.1, length=290, orient=tk.HORIZONTAL, command=phase_switch)
+phase_slider.pack()
+phase_slider.set(max_phase)
 
 scrollbar = tk.Scrollbar(root)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)

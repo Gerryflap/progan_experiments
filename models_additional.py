@@ -102,10 +102,10 @@ class ProGANAdditiveGenerator(torch.nn.Module):
             next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
 
         if alpha == 1.0 and n_upscales > 0:
-            return torch.sigmoid(F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb)
+            return torch.sigmoid(next_rgb)
 
-        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2, mode="bicubic") + alpha * next_rgb
-        return torch.sigmoid(out_rgb)
+        out_rgb = (1 - alpha) * torch.sigmoid(F.interpolate(rgb, scale_factor=2, mode="bicubic")) + alpha * torch.sigmoid(next_rgb)
+        return out_rgb
 
 if __name__ == "__main__":
     from models import ProGANDiscriminator
