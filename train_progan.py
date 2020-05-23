@@ -193,15 +193,21 @@ if __name__ == "__main__":
                      ])
                      )
 
-    from frgc_cropped import FRGCCropped
+    from image_dataset import ImageDataset
 
-    dataset2 = FRGCCropped("/run/media/gerben/LinuxData/data/frgc_cropped",
-                           transform=transforms.Compose([
+    dataset2 = ImageDataset("/run/media/gerben/LinuxData/data/frgc_cropped",
+                            transform=transforms.Compose([
                                transforms.ToTensor()
                            ])
-                           )
+                            )
 
-    train(dataset,
+    dataset3 = ImageDataset("/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128",
+                            transform=transforms.Compose([
+                               transforms.ToTensor()
+                           ])
+                            )
+
+    train(dataset3,
           n_shifting_steps=5000,
           n_static_steps=5000,
           batch_size=16,
@@ -218,6 +224,5 @@ if __name__ == "__main__":
           n_steps_per_output=1000,
           use_special_output_network=True,
           use_additive_net=True,
-          occasional_regularization=False,
-          max_h_size=512
+          max_h_size=256
           )
