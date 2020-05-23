@@ -10,7 +10,7 @@ import util
 from models import ProGANDiscriminator, ProGANGenerator
 
 # Algo
-from models_additional import ProGANAdditiveGenerator
+from models_additional import ProGANAdditiveGenerator, ProGANResDiscriminator
 
 
 def train(
@@ -32,6 +32,7 @@ def train(
         n_steps_per_output=1000,
         use_special_output_network=False,  # When true: use exponential running avg of weights for G output
         use_additive_net=False,            # Use a network that adds the output of rgb layers together
+        use_residual_discriminator=False,
         occasional_regularization=False,    # Only apply regularization every 10 steps, but 10x as strongly
         max_h_size=None                     # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite
 ):
@@ -52,7 +53,10 @@ def train(
         G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
                             scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
-    D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+    if use_residual_discriminator:
+        D = ProGANResDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+    else:
+        D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
     G = G.cuda()
     D = D.cuda()
@@ -212,17 +216,18 @@ if __name__ == "__main__":
           n_static_steps=5000,
           batch_size=16,
           latent_size=256,
-          h_size=8,
+          h_size=48,
           lr=0.01,
           gamma=750.0,
-          max_upscales=5,
+          max_upscales=4,
           network_scaling_factor=2.0,
           lrn_in_G=True,
-          start_at=0,
+          start_at=100000,
           progress_bar=True,
           num_workers=4,
           n_steps_per_output=1000,
           use_special_output_network=True,
           use_additive_net=True,
+          use_residual_discriminator=True,
           max_h_size=256
           )

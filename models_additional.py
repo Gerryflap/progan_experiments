@@ -3,6 +3,7 @@ import math
 import torch
 from torch import nn
 import torch.nn.functional as F
+from models import ProGANDiscriminator
 
 from util import Conv2dNormalizedLR, local_response_normalization, LinearNormalizedLR, Conv2dTransposeNormalizedLR
 
@@ -39,7 +40,8 @@ class ProGANUpBlock(torch.nn.Module):
 
 
 class ProGANAdditiveGenerator(torch.nn.Module):
-    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2, max_h_size: int = 1e10):
+    def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2,
+                 max_h_size: int = 1e10):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
@@ -61,8 +63,8 @@ class ProGANAdditiveGenerator(torch.nn.Module):
     def forward(self, x, phase=None):
 
         # Project latent vectors onto hypersphere
-        x_divisor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True)) + 1e-8
-        x = x/x_divisor
+        x_divisor = torch.sqrt(torch.sum(x ** 2, dim=1, keepdim=True)) + 1e-8
+        x = x / x_divisor
 
         if phase is None:
             phase = self.n_upscales
@@ -97,15 +99,78 @@ class ProGANAdditiveGenerator(torch.nn.Module):
             n_actual_upscales += 1
 
         for i in range(1, min(self.n_upscales, n_actual_upscales)):
-            x, rgb = next_x,  next_rgb
+            x, rgb = next_x, next_rgb
             next_x, next_rgb = self.layers[i](x)
             next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
 
         if alpha == 1.0 and n_upscales > 0:
             return torch.sigmoid(next_rgb)
 
-        out_rgb = (1 - alpha) * torch.sigmoid(F.interpolate(rgb, scale_factor=2, mode="bicubic")) + alpha * torch.sigmoid(next_rgb)
+        out_rgb = (1 - alpha) * torch.sigmoid(
+            F.interpolate(rgb, scale_factor=2, mode="bicubic")) + alpha * torch.sigmoid(next_rgb)
         return out_rgb
+
+
+class ProGANResidualDownBlock(torch.nn.Module):
+    def __init__(self, input_channels, output_channels, downsample=True, local_response_norm=False,
+                 progan_var_input=False, last_layer=False):
+        super().__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.progran_var_input = progan_var_input
+        self.last_layer = last_layer
+
+        conv_1_input_channels = input_channels + (1 if progan_var_input else 0)
+        # According to the ProGAN paper appendix, the "hidden" number of channels should be the same as the input size
+        conv_1_output_channels = output_channels if self.last_layer else input_channels
+        self.conv_1 = Conv2dNormalizedLR(conv_1_input_channels, conv_1_output_channels,
+                                         kernel_size=3, padding=1)
+        if not self.last_layer:
+            self.conv_2 = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
+        if self.input_channels != self.output_channels:
+            self.conv_res = Conv2dNormalizedLR(input_channels, output_channels, kernel_size=1)
+        self.conv_rgb = Conv2dNormalizedLR(3, input_channels, kernel_size=1)
+        self.downsample = downsample
+        self.lrn = local_response_norm
+
+    def forward(self, x):
+        carry = x
+        if self.progran_var_input:
+            # Apply the ProGAN mbatch stddev trick
+            stddevs = x.std(dim=0, keepdim=True)
+            stddev = stddevs.mean()
+            feature_map = torch.zeros_like(x[:, :1]) + stddev
+            x = torch.cat([x, feature_map], dim=1)
+        x = self.conv_1(x)
+        if self.lrn:
+            x = local_response_normalization(x)
+        x = F.leaky_relu(x, 0.2)
+
+        if not self.last_layer:
+            x = self.conv_2(x)
+            if self.lrn:
+                x = local_response_normalization(x)
+            x = F.leaky_relu(x, 0.2)
+
+        if self.downsample:
+            x = F.avg_pool2d(x, 2)
+            carry = F.avg_pool2d(carry, 2)
+
+        if self.input_channels != self.output_channels:
+            carry = self.conv_res(carry)
+        x = carry + x
+        return x
+
+    def from_rgb(self, x):
+        # Generated an input for this network from RGB
+        x = self.conv_rgb(x)
+        x = F.leaky_relu(x, 0.2)
+        return x
+
+
+class ProGANResDiscriminator(ProGANDiscriminator):
+    down_block = ProGANResidualDownBlock
+
 
 if __name__ == "__main__":
     from models import ProGANDiscriminator
@@ -121,7 +186,7 @@ if __name__ == "__main__":
 
 
     G = ProGANAdditiveGenerator(128, 4, 8, scaling_factor=2)
-    D = ProGANDiscriminator(4, 8, scaling_factor=2)
+    D = ProGANResDiscriminator(4, 8, scaling_factor=2)
 
     for phase in [0, 0.5, 1, 2, 3, 3.5, 4]:
         z = torch.normal(0, 1, (1, 128))

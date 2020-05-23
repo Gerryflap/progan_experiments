@@ -158,6 +158,7 @@ class ProGANDownBlock(torch.nn.Module):
 
 
 class ProGANDiscriminator(torch.nn.Module):
+    down_block = ProGANDownBlock
     def __init__(self, n_downscales, full_res_h_size, scaling_factor=2, max_h_size: int = 1e10):
         super().__init__()
         self.n_downscales = n_downscales
@@ -168,14 +169,14 @@ class ProGANDiscriminator(torch.nn.Module):
 
         self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
         self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, 1)
-        outp_block = ProGANDownBlock(self.deepest_channels, self.deepest_channels, downsample=False,
+        outp_block = self.down_block(self.deepest_channels, self.deepest_channels, downsample=False,
                                      local_response_norm=False, progan_var_input=True, last_layer=True)
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
             inp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1))), max_h_size)
             outp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i))), max_h_size)
-            self.layer_list.append(ProGANDownBlock(inp_channels, outp_channels, local_response_norm=False))
+            self.layer_list.append(self.down_block(inp_channels, outp_channels, local_response_norm=False))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
     def forward(self, x, phase=None):
