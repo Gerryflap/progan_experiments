@@ -31,12 +31,13 @@ def weights_init(m):
             nn.init.normal_(m.weight.data, 1.0, 0.02)
             nn.init.constant_(m.bias.data, 0)
 
+
 class Conv2dNormalizedLR(torch.nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True):
         super().__init__()
         self.stride = stride
         self.padding = padding
-        self.he_constant = (2.0/float(in_channels*kernel_size*kernel_size))**0.5
+        self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
 
@@ -54,6 +55,7 @@ class Conv2dNormalizedLR(torch.nn.Module):
     def reset_parameters(self):
         self.apply(weights_init)
 
+
 class Conv2dTransposeNormalizedLR(torch.nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True):
         super().__init__()
@@ -61,7 +63,7 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
         self.padding = padding
         # In the ProGAN source code the kernel**2 is also included.
         # I don't understand why, since the input of conv2d transpose is 1x1 as far as I'm aware, but okay.
-        self.he_constant = (2.0/float(in_channels * kernel_size * kernel_size))**0.5
+        self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(in_channels, out_channels, kernel_size, kernel_size))
 
@@ -83,7 +85,7 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
 class LinearNormalizedLR(torch.nn.Module):
     def __init__(self, in_channels: int, out_channels: int, bias=True):
         super().__init__()
-        self.he_constant = (2.0/float(in_channels))**0.5
+        self.he_constant = (2.0 / float(in_channels)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
 
@@ -110,7 +112,7 @@ def local_response_normalization(x, eps=1e-8):
     :return: Normalized x
     """
     divisor = (torch.pow(x, 2).mean(dim=1, keepdim=True) + eps).sqrt()
-    b = x/divisor
+    b = x / divisor
     return b
 
 
@@ -130,3 +132,32 @@ class LocalResponseNorm(torch.nn.Module):
 def update_output_network(G_out, G, factor=0.999):
     for (p_out, p_train) in zip(G_out.parameters(), G.parameters()):
         p_out.data = p_out.data * factor + p_train.data * (1.0 - factor)
+
+
+def save_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, info_obj):
+    torch.save(
+        {
+            "G": G.state_dict(),
+            "G_out": G_out.state_dict(),
+            "D": D.state_dict(),
+            "optim_G": optim_G.state_dict(),
+            "optim_D": optim_D.state_dict(),
+            "info": info_obj
+        },
+        folder_path
+    )
+
+
+def load_checkpoint(folder_path, G, G_out, D, optim_G, optim_D):
+    """
+    Loads state dict into Modules
+    :param path: Path to checkpoint
+    :return Info object created by other methods
+    """
+    checkpoint = torch.load(folder_path)
+    G.load_state_dict(checkpoint["G"])
+    G_out.load_state_dict(checkpoint["G_out"])
+    D.load_state_dict(checkpoint["D"])
+    optim_G.load_state_dict(checkpoint["optim_G"])
+    optim_D.load_state_dict(checkpoint["optim_D"])
+    return checkpoint["info"]

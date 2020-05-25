@@ -1,4 +1,7 @@
 import math
+import os
+import time
+from datetime import date, datetime
 
 import torchvision
 from torch.utils.data import DataLoader
@@ -25,7 +28,7 @@ def train(
         max_upscales=4,
         network_scaling_factor=2.0,
         lrn_in_G=True,
-        start_at=0,
+        start_phase=0,                        # Can be used to start at a certain resolution. Only works well for whole numbers.
         num_workers=0,
         progress_bar=False,
         shuffle=True,
@@ -34,15 +37,19 @@ def train(
         use_additive_net=False,            # Use a network that adds the output of rgb layers together
         use_residual_discriminator=False,
         occasional_regularization=False,    # Only apply regularization every 10 steps, but 10x as strongly
-        max_h_size=None                     # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite
+        max_h_size=None,                     # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
+        load_path=None,                    # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
 ):
+
     if max_h_size is None:
         max_h_size = int(1e10)
     if num_workers == 0:
         print("Using num_workers = 0. It might be useful to add more workers if your machine allows for it.")
-    n_static_steps_taken = start_at
-    n_shifting_steps_taken = start_at
+
+    n_static_steps_taken = 0
+    n_shifting_steps_taken = 0
     static = True
+
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=True)
 
@@ -77,9 +84,26 @@ def train(
     G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
 
+    if load_path is not None:
+        info = util.load_checkpoint(os.path.join(load_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt)
+        n_static_steps_taken = info["n_stat"]
+        n_shifting_steps_taken = info["n_shift"]
+        static = info["static"]
+        output_path = load_path
+    else:
+        now = datetime.now()
+
+        output_path = os.path.join("results", "exp_%s"%(now.strftime("%Y%m%d%H%M")))
+        os.mkdir(output_path)
+        info = None
+
     first_print = True
 
-    test_z = torch.normal(0, 1, (16, latent_size), device="cuda")
+    if info is None or info["test_z"] is None:
+        test_z = torch.normal(0, 1, (16, latent_size), device="cuda")
+    else:
+        test_z = info["test_z"]
+    last_print = None
 
     while True:
         for batch in loader:
@@ -88,7 +112,7 @@ def train(
             else:
                 n_shifting_steps_taken += 1
 
-            phase = min(n_shifting_steps_taken / n_shifting_steps, max_upscales)
+            phase = min(start_phase + (n_shifting_steps_taken / n_shifting_steps), max_upscales)
 
             x, _ = batch
             x = x.cuda()
@@ -153,15 +177,7 @@ def train(
             if use_special_output_network:
                 util.update_output_network(G_out, G)
 
-            switched = False
-            if static and (n_static_steps_taken % n_static_steps == 0):
-                print("Switching to shift")
-                static = False
-                switched = True
-            elif (not static) and (n_shifting_steps_taken % n_shifting_steps == 0):
-                print("Switching to static")
-                static = True
-                switched = True
+
 
             if progress_bar:
                 percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
@@ -169,21 +185,45 @@ def train(
                 print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
 
             if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
+                if progress_bar:
+                    print(" "*50, end="\r", flush=True)
+                print("Print at ", n_static_steps_taken, n_shifting_steps_taken, phase)
                 if first_print:
-                    torchvision.utils.save_image(x, "results/reals.png")
+                    torchvision.utils.save_image(x, os.path.join(output_path, "reals.png"))
                     first_print = False
+                    last_print = time.time()
+                else:
+                    current_time = time.time()
+                    diff = current_time - last_print
+                    per_step = diff/n_steps_per_output
+                    last_print = current_time
+                    print("Seconds since last print: %.2f, seconds per step: %.5f"%(diff, per_step))
+
                 print("D loss: ", d_loss.detach().cpu().item())
                 print("D loss total: ", d_loss_total.detach().cpu().item())
                 print("G loss: ", g_loss.detach().cpu().item())
+
                 print()
 
                 test_batch = G_out(test_z, phase=phase)
-                torchvision.utils.save_image(test_batch, "results/results_%d_%d_%.3f.png" % (
-                    n_static_steps_taken, n_shifting_steps_taken, phase))
+                torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
+                    n_static_steps_taken, n_shifting_steps_taken, phase)))
 
-                torch.save(G, "G.pt")
-                torch.save(G_out, "G_out.pt")
-                torch.save(D, "D.pt")
+                torch.save(G, os.path.join(output_path, "G.pt"))
+                info = {
+                    "n_stat": n_static_steps_taken,
+                    "n_shift": n_shifting_steps_taken,
+                    "static": static,
+                    "test_z": test_z
+                }
+                util.save_checkpoint(os.path.join(output_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, info)
+
+            if static and (n_static_steps_taken % n_static_steps == 0):
+                print("Switching to shift")
+                static = False
+            elif (not static) and (n_shifting_steps_taken % n_shifting_steps == 0):
+                print("Switching to static")
+                static = True
 
 
 if __name__ == "__main__":
@@ -212,22 +252,23 @@ if __name__ == "__main__":
                             )
 
     train(dataset3,
-          n_shifting_steps=5000,
-          n_static_steps=5000,
+          n_shifting_steps=15000,
+          n_static_steps=15000,
           batch_size=16,
-          latent_size=256,
-          h_size=48,
-          lr=0.01,
+          latent_size=512,
+          h_size=4,
+          lr=0.003,
           gamma=750.0,
           max_upscales=4,
           network_scaling_factor=2.0,
           lrn_in_G=True,
-          start_at=100000,
+          start_phase=0,
           progress_bar=True,
           num_workers=4,
           n_steps_per_output=1000,
           use_special_output_network=True,
           use_additive_net=True,
           use_residual_discriminator=True,
-          max_h_size=256
+          max_h_size=128,
+          load_path="results/exp_202005251652"
           )
