@@ -33,10 +33,11 @@ def weights_init(m):
 
 
 class Conv2dNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False):
         super().__init__()
         self.stride = stride
         self.padding = padding
+        self.weight_norm = weight_norm
         self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
@@ -49,6 +50,8 @@ class Conv2dNormalizedLR(torch.nn.Module):
 
     def forward(self, inp):
         weight = self.weight * self.he_constant
+        if self.weight_norm:
+            weight = apply_weight_norm(weight, input_dims=(1, 2, 3))
         x = torch.nn.functional.conv2d(inp, weight, self.bias, self.stride, self.padding)
         return x
 
@@ -57,10 +60,11 @@ class Conv2dNormalizedLR(torch.nn.Module):
 
 
 class Conv2dTransposeNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False):
         super().__init__()
         self.stride = stride
         self.padding = padding
+        self.weight_norm = weight_norm
         # In the ProGAN source code the kernel**2 is also included.
         # I don't understand why, since the input of conv2d transpose is 1x1 as far as I'm aware, but okay.
         self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
@@ -75,6 +79,8 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
 
     def forward(self, inp):
         weight = self.weight * self.he_constant
+        if self.weight_norm:
+            weight = apply_weight_norm(weight, input_dims=(0, 2, 3))
         x = torch.nn.functional.conv_transpose2d(inp, weight, self.bias, self.stride, self.padding)
         return x
 
@@ -83,11 +89,12 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
 
 
 class LinearNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bias=True):
+    def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False):
         super().__init__()
         self.he_constant = (2.0 / float(in_channels)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
+        self.weight_norm = weight_norm
 
         if bias:
             self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
@@ -97,6 +104,8 @@ class LinearNormalizedLR(torch.nn.Module):
 
     def forward(self, inp):
         weight = self.weight * self.he_constant
+        if self.weight_norm:
+            weight = apply_weight_norm(weight, input_dims=1)
         x = torch.nn.functional.linear(inp, weight, self.bias)
         return x
 
@@ -161,3 +170,13 @@ def load_checkpoint(folder_path, G, G_out, D, optim_G, optim_D):
     optim_G.load_state_dict(checkpoint["optim_G"])
     optim_D.load_state_dict(checkpoint["optim_D"])
     return checkpoint["info"]
+
+
+def apply_weight_norm(w, input_dims=(1, 2, 3), eps=1e-8):
+    """
+    Applies the "demodulation" operation from StyleGAN2 as a form of normalization.
+    :param w: Weights
+    :return: Normed weights
+    """
+    divisor = torch.rsqrt(torch.square(w).sum(dim=input_dims, keepdim=True) + eps)
+    return w * divisor

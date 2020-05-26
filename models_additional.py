@@ -9,14 +9,16 @@ from util import Conv2dNormalizedLR, local_response_normalization, LinearNormali
 
 
 class ProGANUpBlock(torch.nn.Module):
-    def __init__(self, input_channels, output_channels, upsample=True, local_response_norm=True):
+    def __init__(self, input_channels, output_channels, upsample=True, local_response_norm=True, weight_norm=False):
         super().__init__()
         self.input_channels = input_channels
         self.output_channels = output_channels
+        self.weight_norm = weight_norm
 
-        self.conv_1 = Conv2dTransposeNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_2 = Conv2dTransposeNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1)
-        self.conv_rgb = Conv2dNormalizedLR(output_channels, 3, kernel_size=1)
+        self.conv_1 = Conv2dTransposeNormalizedLR(input_channels, output_channels, kernel_size=3, padding=1, weight_norm=self.weight_norm)
+        self.conv_2 = Conv2dTransposeNormalizedLR(output_channels, output_channels, kernel_size=3, padding=1, weight_norm=self.weight_norm)
+        # Weight Norm is always disabled here because we don't want to normalize the RGB output
+        self.conv_rgb = Conv2dNormalizedLR(output_channels, 3, kernel_size=1, weight_norm=False)
         self.upsample = upsample
         self.lrn = local_response_norm
 
@@ -41,23 +43,24 @@ class ProGANUpBlock(torch.nn.Module):
 
 class ProGANAdditiveGenerator(torch.nn.Module):
     def __init__(self, latent_size, n_upscales, output_h_size, local_response_norm=True, scaling_factor=2,
-                 max_h_size: int = 1e10):
+                 max_h_size: int = 1e10, weight_norm=False):
         super().__init__()
         self.n_upscales = n_upscales
         self.output_h_size = output_h_size
         self.scaling_factor = scaling_factor
         self.initial_size = min(int(output_h_size * self.scaling_factor ** (n_upscales)), max_h_size)
         self.lrn = local_response_norm
+        self.weight_norm = weight_norm
 
-        self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4)
-        self.init_layer = Conv2dTransposeNormalizedLR(self.initial_size, self.initial_size, kernel_size=3, padding=1)
-        self.init_rgb = Conv2dNormalizedLR(self.initial_size, 3, kernel_size=1)
+        self.inp_layer = LinearNormalizedLR(latent_size, self.initial_size * 4 * 4, weight_norm=self.weight_norm)
+        self.init_layer = Conv2dTransposeNormalizedLR(self.initial_size, self.initial_size, kernel_size=3, padding=1, weight_norm=self.weight_norm)
+        self.init_rgb = Conv2dNormalizedLR(self.initial_size, 3, kernel_size=1, weight_norm=self.weight_norm)
 
         self.layer_list = []
         for i in range(n_upscales):
             inp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i)), max_h_size)
             outp_channels = min(int(output_h_size * self.scaling_factor ** (n_upscales - i - 1)), max_h_size)
-            self.layer_list.append(ProGANUpBlock(inp_channels, outp_channels, local_response_norm=local_response_norm))
+            self.layer_list.append(ProGANUpBlock(inp_channels, outp_channels, local_response_norm=local_response_norm, weight_norm=self.weight_norm))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
     def forward(self, x, phase=None):

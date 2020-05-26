@@ -28,6 +28,7 @@ def train(
         max_upscales=4,
         network_scaling_factor=2.0,
         lrn_in_G=True,
+        wn_in_G=False,                        # Enables weight norm (experimental)
         start_phase=0,                        # Can be used to start at a certain resolution. Only works well for whole numbers.
         num_workers=0,
         progress_bar=False,
@@ -37,8 +38,9 @@ def train(
         use_additive_net=False,            # Use a network that adds the output of rgb layers together
         use_residual_discriminator=False,
         occasional_regularization=False,    # Only apply regularization every 10 steps, but 10x as strongly
-        max_h_size=None,                     # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
-        load_path=None,                    # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
+        max_h_size=None,                    # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
+        load_path=None,                     # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
+        nn_interpolation=False              # Enables nearest neighbour interpolation as interpolation method for the training images. Otherwise
 ):
 
     if max_h_size is None:
@@ -55,10 +57,10 @@ def train(
 
     if use_additive_net:
         G = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size, weight_norm=wn_in_G)
     else:
         G = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                            scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+                            scaling_factor=network_scaling_factor, max_h_size=max_h_size, weight_norm=wn_in_G)
 
     if use_residual_discriminator:
         D = ProGANResDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
@@ -71,10 +73,10 @@ def train(
     if use_special_output_network:
         if use_additive_net:
             G_out = ProGANAdditiveGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                            scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+                                            scaling_factor=network_scaling_factor, max_h_size=max_h_size, weight_norm=wn_in_G)
         else:
             G_out = ProGANGenerator(latent_size, max_upscales, 4, local_response_norm=lrn_in_G,
-                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+                                    scaling_factor=network_scaling_factor, max_h_size=max_h_size, weight_norm=wn_in_G)
         G_out = G_out.cuda()
         # Set the weights of G_out to those of G
         util.update_output_network(G_out, G, factor=0.0)
@@ -116,8 +118,10 @@ def train(
 
             x, _ = batch
             x = x.cuda()
-            x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
-
+            if nn_interpolation:
+                x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
+            else:
+                x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
             # =========== Train D ========
             D_opt.zero_grad()
 
@@ -252,16 +256,17 @@ if __name__ == "__main__":
                             )
 
     train(dataset3,
-          n_shifting_steps=15000,
-          n_static_steps=15000,
+          n_shifting_steps=5000,
+          n_static_steps=5000,
           batch_size=16,
-          latent_size=512,
-          h_size=4,
-          lr=0.003,
+          latent_size=256,
+          h_size=16,
+          lr=0.01,
           gamma=750.0,
           max_upscales=4,
           network_scaling_factor=2.0,
-          lrn_in_G=True,
+          lrn_in_G=False,
+          wn_in_G=True,
           start_phase=0,
           progress_bar=True,
           num_workers=4,
@@ -269,6 +274,5 @@ if __name__ == "__main__":
           use_special_output_network=True,
           use_additive_net=True,
           use_residual_discriminator=True,
-          max_h_size=128,
-          load_path="results/exp_202005251652"
+          max_h_size=256,
           )
