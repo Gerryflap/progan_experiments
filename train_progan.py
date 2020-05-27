@@ -91,6 +91,12 @@ def train(
         n_static_steps_taken = info["n_stat"]
         n_shifting_steps_taken = info["n_shift"]
         static = info["static"]
+
+        if n_static_steps_taken - n_static_steps >= n_shifting_steps_taken:
+            static = False
+            print("Switching to shift")
+
+
         output_path = load_path
     else:
         now = datetime.now()
@@ -275,4 +281,5 @@ if __name__ == "__main__":
           use_additive_net=True,
           use_residual_discriminator=True,
           max_h_size=256,
+          load_path="results/exp_202005261914/"
           )
