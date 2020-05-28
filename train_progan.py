@@ -13,7 +13,7 @@ import util
 from models import ProGANDiscriminator, ProGANGenerator
 
 # Algo
-from models_additional import ProGANAdditiveGenerator, ProGANResDiscriminator
+from models_additional import ProGANAdditiveGenerator, ProGANResDiscriminator, ProGANResEncoder
 
 
 def train(
@@ -41,6 +41,7 @@ def train(
         max_h_size=None,                    # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
         load_path=None,                     # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
         nn_interpolation=False,             # Enables nearest neighbour interpolation as interpolation method for the training images.
+        train_encoder=False,
 ):
 
     if max_h_size is None:
@@ -67,6 +68,11 @@ def train(
     else:
         D = ProGANDiscriminator(max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
+    encoder = None
+    if train_encoder:
+        encoder = ProGANResEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        encoder = encoder.cuda()
+
     G = G.cuda()
     D = D.cuda()
 
@@ -85,9 +91,12 @@ def train(
 
     G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
+    enc_opt = None
+    if encoder is not None:
+        enc_opt = torch.optim.Adam(encoder.parameters(), lr=lr, betas=(0, 0.99))
 
     if load_path is not None:
-        info = util.load_checkpoint(os.path.join(load_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt)
+        info = util.load_checkpoint(os.path.join(load_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, encoder, enc_opt)
         n_static_steps_taken = info["n_stat"]
         n_shifting_steps_taken = info["n_shift"]
         static = info["static"]
@@ -103,6 +112,8 @@ def train(
 
         output_path = os.path.join("results", "exp_%s"%(now.strftime("%Y%m%d%H%M")))
         os.mkdir(output_path)
+        if encoder is not None:
+            os.mkdir(os.path.join(output_path, "encoding"))
         info = None
 
     first_print = True
@@ -111,6 +122,11 @@ def train(
         test_z = torch.normal(0, 1, (16, latent_size), device="cuda")
     else:
         test_z = info["test_z"]
+
+    if info is None or info["test_x"] is None:
+        test_x = None
+    else:
+        test_x = info["test_x"]
     last_print = None
 
     while True:
@@ -124,6 +140,9 @@ def train(
 
             x, _ = batch
             x = x.cuda()
+
+            if test_x is None:
+                test_x = x
             if nn_interpolation:
                 x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))))
             else:
@@ -182,12 +201,22 @@ def train(
             g_loss = -D(fake_batch, phase=phase).mean()
             g_loss.backward()
 
+
+            if encoder is not None:
+                enc_opt.zero_grad()
+                z, means, log_vars = encoder(x, phase=phase)
+                l_prior = -0.5 * torch.mean(1 + log_vars - torch.pow(means, 2) - torch.exp(log_vars))
+                x_recon = G(z, phase=phase)
+                l_recon = torch.nn.functional.mse_loss(x_recon, x)
+                loss = l_prior + 0.1 * l_recon
+                loss.backward()
+                enc_opt.step()
+
             G_opt.step()
+
 
             if use_special_output_network:
                 util.update_output_network(G_out, G)
-
-
 
             if progress_bar:
                 percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
@@ -212,6 +241,9 @@ def train(
                 print("D loss: ", d_loss.detach().cpu().item())
                 print("D loss total: ", d_loss_total.detach().cpu().item())
                 print("G loss: ", g_loss.detach().cpu().item())
+                if encoder:
+                    print("l_prior: ", l_prior.detach().cpu().item())
+                    print("l_recon: ", l_recon.detach().cpu().item())
 
                 print()
 
@@ -219,14 +251,23 @@ def train(
                 torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase)))
 
+                if encoder is not None:
+                    x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
+                    test_recons = G_out(encoder(x_res, phase=phase)[0], phase=phase)
+                    torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
+                                                 os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (n_static_steps_taken, n_shifting_steps_taken, phase)),
+                                                 nrow=batch_size)
+
+
                 torch.save(G, os.path.join(output_path, "G.pt"))
                 info = {
                     "n_stat": n_static_steps_taken,
                     "n_shift": n_shifting_steps_taken,
                     "static": static,
-                    "test_z": test_z
+                    "test_z": test_z,
+                    "test_x": test_x,
                 }
-                util.save_checkpoint(os.path.join(output_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, info)
+                util.save_checkpoint(os.path.join(output_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, info, enc=encoder, enc_opt=enc_opt)
 
             if static and (n_static_steps_taken % n_static_steps == 0):
                 print("Switching to shift")
@@ -266,7 +307,7 @@ if __name__ == "__main__":
           n_static_steps=5000,
           batch_size=16,
           latent_size=256,
-          h_size=32,
+          h_size=16,
           lr=0.01,
           gamma=750.0,
           max_upscales=4,
@@ -281,4 +322,5 @@ if __name__ == "__main__":
           use_additive_net=True,
           use_residual_discriminator=True,
           max_h_size=256,
+          train_encoder=True
           )

@@ -143,7 +143,7 @@ def update_output_network(G_out, G, factor=0.999):
         p_out.data = p_out.data * factor + p_train.data * (1.0 - factor)
 
 
-def save_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, info_obj):
+def save_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, info_obj, enc=None, enc_opt=None):
     torch.save(
         {
             "G": G.state_dict(),
@@ -151,13 +151,15 @@ def save_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, info_obj):
             "D": D.state_dict(),
             "optim_G": optim_G.state_dict(),
             "optim_D": optim_D.state_dict(),
-            "info": info_obj
+            "info": info_obj,
+            "enc": enc,
+            "enc_opt": enc_opt,
         },
         folder_path
     )
 
 
-def load_checkpoint(folder_path, G, G_out, D, optim_G, optim_D):
+def load_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, enc=None, enc_opt=None):
     """
     Loads state dict into Modules
     :param path: Path to checkpoint
@@ -169,6 +171,10 @@ def load_checkpoint(folder_path, G, G_out, D, optim_G, optim_D):
     D.load_state_dict(checkpoint["D"])
     optim_G.load_state_dict(checkpoint["optim_G"])
     optim_D.load_state_dict(checkpoint["optim_D"])
+    if enc is not None:
+        enc.load_state_dict(checkpoint["enc"])
+    if enc_opt is not None:
+        enc_opt.load_state_dict(checkpoint["enc_opt"])
     return checkpoint["info"]
 
 

@@ -181,6 +181,7 @@ class ProGANResEncoder(torch.nn.Module):
         self.n_downscales = n_downscales
         self.h_size = full_res_h_size
         self.scaling_factor = scaling_factor
+        self.latent_size = latent_size
 
         self.deepest_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales))), max_h_size)
 
@@ -251,13 +252,16 @@ if __name__ == "__main__":
 
     G = ProGANAdditiveGenerator(128, 4, 8, scaling_factor=2)
     D = ProGANResDiscriminator(4, 8, scaling_factor=2)
+    E = ProGANResEncoder(128, 4, 8, 2)
 
     for phase in [0, 0.5, 1, 2, 3, 3.5, 4]:
-        z = torch.normal(0, 1, (1, 128))
+        z = torch.normal(0, 1, (10, 128))
         x_gen = G(z, phase=phase)
         print("G out: ", x_gen.size())
         d_out = D(x_gen, phase=phase)
         print(d_out.size())
+        e_out = E(x_gen, phase=phase)
+        print("e_out", e_out[0].size())
 
     print("G_params: ", compute_n_params(G))
     print("D_params: ", compute_n_params(D))

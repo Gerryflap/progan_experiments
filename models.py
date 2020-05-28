@@ -181,6 +181,8 @@ class ProGANDiscriminator(torch.nn.Module):
             outp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i))), max_h_size)
             self.layer_list.append(self.down_block(inp_channels, outp_channels, local_response_norm=False))
         self.layers = torch.nn.ModuleList(self.layer_list)
+        self.dis_l = None
+
 
     def forward(self, x, phase=None):
         if phase is None:
@@ -201,6 +203,9 @@ class ProGANDiscriminator(torch.nn.Module):
             x = alpha * x1 + (1 - alpha) * x2
 
         for i in range(0, n_downscales + 1):
+            if i == n_downscales:
+                # Save dis_l
+                self.dis_l = x
             layer = self.layers[n_downscales - i]
             x = layer(x)
 
