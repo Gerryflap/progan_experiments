@@ -40,7 +40,7 @@ def train(
         occasional_regularization=False,    # Only apply regularization every 10 steps, but 10x as strongly
         max_h_size=None,                    # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
         load_path=None,                     # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
-        nn_interpolation=False              # Enables nearest neighbour interpolation as interpolation method for the training images. Otherwise
+        nn_interpolation=False,             # Enables nearest neighbour interpolation as interpolation method for the training images.
 ):
 
     if max_h_size is None:
@@ -261,12 +261,12 @@ if __name__ == "__main__":
                            ])
                             )
 
-    train(dataset3,
+    train(dataset,
           n_shifting_steps=5000,
           n_static_steps=5000,
           batch_size=16,
           latent_size=256,
-          h_size=16,
+          h_size=32,
           lr=0.01,
           gamma=750.0,
           max_upscales=4,
@@ -281,5 +281,4 @@ if __name__ == "__main__":
           use_additive_net=True,
           use_residual_discriminator=True,
           max_h_size=256,
-          load_path="results/exp_202005261914/"
           )

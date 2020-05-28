@@ -92,10 +92,10 @@ class ProGANAdditiveGenerator(torch.nn.Module):
         rgb = self.init_rgb(x)
 
         if alpha == 0.0 and n_upscales == 0:
-            return torch.sigmoid(rgb)
+            return rgb
 
         next_x, next_rgb = self.layers[0](x)
-        next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
+        next_rgb = F.interpolate(rgb, scale_factor=2, mode="bilinear") + next_rgb
 
         n_actual_upscales = n_upscales
         if 0 < alpha < 1:
@@ -104,13 +104,12 @@ class ProGANAdditiveGenerator(torch.nn.Module):
         for i in range(1, min(self.n_upscales, n_actual_upscales)):
             x, rgb = next_x, next_rgb
             next_x, next_rgb = self.layers[i](x)
-            next_rgb = F.interpolate(rgb, scale_factor=2, mode="bicubic") + next_rgb
+            next_rgb = F.interpolate(rgb, scale_factor=2, mode="bilinear") + next_rgb
 
         if alpha == 1.0 and n_upscales > 0:
-            return torch.sigmoid(next_rgb)
+            return next_rgb
 
-        out_rgb = (1 - alpha) * torch.sigmoid(
-            F.interpolate(rgb, scale_factor=2, mode="bicubic")) + alpha * torch.sigmoid(next_rgb)
+        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2, mode="bilinear") + alpha * next_rgb
         return out_rgb
 
 
@@ -161,7 +160,7 @@ class ProGANResidualDownBlock(torch.nn.Module):
 
         if self.input_channels != self.output_channels:
             carry = self.conv_res(carry)
-        x = carry + x
+        x = (carry + x)/(2**0.5)
         return x
 
     def from_rgb(self, x):
@@ -174,6 +173,68 @@ class ProGANResidualDownBlock(torch.nn.Module):
 class ProGANResDiscriminator(ProGANDiscriminator):
     down_block = ProGANResidualDownBlock
 
+
+class ProGANResEncoder(torch.nn.Module):
+    down_block = ProGANResidualDownBlock
+    def __init__(self, latent_size, n_downscales, full_res_h_size, scaling_factor=2, max_h_size: int = 1e10):
+        super().__init__()
+        self.n_downscales = n_downscales
+        self.h_size = full_res_h_size
+        self.scaling_factor = scaling_factor
+
+        self.deepest_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales))), max_h_size)
+
+        self.outp_layer_1 = LinearNormalizedLR(self.deepest_channels * 4 * 4, self.deepest_channels)
+        self.outp_layer_2 = LinearNormalizedLR(self.deepest_channels, latent_size*2)
+        outp_block = self.down_block(self.deepest_channels, self.deepest_channels, downsample=False,
+                                     local_response_norm=False, progan_var_input=False, last_layer=True)
+
+        self.layer_list = [outp_block]
+        for i in range(n_downscales):
+            inp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1))), max_h_size)
+            outp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i))), max_h_size)
+            self.layer_list.append(self.down_block(inp_channels, outp_channels, local_response_norm=False))
+        self.layers = torch.nn.ModuleList(self.layer_list)
+
+    def forward(self, x, phase=None):
+        if phase is None:
+            phase = self.n_downscales
+
+        n_downscales = min(int(phase), self.n_downscales)
+        alpha = phase - n_downscales
+
+        if alpha == 0.0:
+            x = self.layers[n_downscales].from_rgb(x)
+        else:
+            x1 = self.layers[n_downscales + 1].from_rgb(x)
+            x1 = self.layers[n_downscales + 1](x1)
+
+            x2 = F.avg_pool2d(x, 2)
+            x2 = self.layers[n_downscales].from_rgb(x2)
+
+            x = alpha * x1 + (1 - alpha) * x2
+
+        for i in range(0, n_downscales + 1):
+            layer = self.layers[n_downscales - i]
+            x = layer(x)
+
+        x = x.view(-1, self.deepest_channels * 4 * 4)
+
+        x = self.outp_layer_1(x)
+        x = F.leaky_relu(x, 0.2)
+
+        x = self.outp_layer_2(x)
+        means, log_vars = x[:, :self.latent_size], x[:, self.latent_size:]
+        log_vars = -torch.nn.functional.softplus(log_vars)
+        z = self.sample(means, log_vars)
+
+        return z, means, log_vars
+
+    @staticmethod
+    def sample(means, vars):
+        stds = torch.exp(0.5 * vars)
+        eps = torch.randn_like(stds)
+        return means + eps * stds
 
 if __name__ == "__main__":
     from models import ProGANDiscriminator
