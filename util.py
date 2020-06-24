@@ -89,9 +89,9 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
 
 
 class LinearNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False):
+    def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False, learning_rate_factor=1.0):
         super().__init__()
-        self.he_constant = (2.0 / float(in_channels)) ** 0.5
+        self.he_constant = learning_rate_factor * (2.0 / float(in_channels)) ** 0.5
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
         self.weight_norm = weight_norm
@@ -186,3 +186,11 @@ def apply_weight_norm(w, input_dims=(1, 2, 3), eps=1e-8):
     """
     divisor = torch.rsqrt(torch.square(w).sum(dim=input_dims, keepdim=True) + eps)
     return w * divisor
+
+class Reshape(torch.nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.shape = shape
+
+    def forward(self, x):
+        return x.view(*self.shape)
