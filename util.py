@@ -152,8 +152,8 @@ def save_checkpoint(folder_path, G, G_out, D, optim_G, optim_D, info_obj, enc=No
             "optim_G": optim_G.state_dict(),
             "optim_D": optim_D.state_dict(),
             "info": info_obj,
-            "enc": enc,
-            "enc_opt": enc_opt,
+            "enc": enc.state_dict() if enc is not None else None,
+            "enc_opt": enc_opt.state_dict() if enc_opt is not None else None,
         },
         folder_path
     )

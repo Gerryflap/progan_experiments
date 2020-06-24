@@ -205,10 +205,12 @@ def train(
             if encoder is not None:
                 enc_opt.zero_grad()
                 z, means, log_vars = encoder(x, phase=phase)
-                l_prior = -0.5 * torch.mean(1 + log_vars - torch.pow(means, 2) - torch.exp(log_vars))
+                # l_prior = -0.5 * torch.sum(1 + log_vars - torch.pow(means, 2) - torch.exp(log_vars))/batch_size
+                l_prior = torch.mean(z.mean(dim=0)**2.0 + (z.std(dim=0) - 1.0) **2.0)
                 x_recon = G(z, phase=phase)
+                # l_recon = torch.nn.functional.mse_loss(x_recon, x, reduction="sum")/batch_size
                 l_recon = torch.nn.functional.mse_loss(x_recon, x)
-                loss = l_prior + 0.1 * l_recon
+                loss = l_prior + l_recon
                 loss.backward()
                 enc_opt.step()
 
@@ -302,25 +304,31 @@ if __name__ == "__main__":
                            ])
                             )
 
-    train(dataset,
-          n_shifting_steps=5000,
-          n_static_steps=5000,
+    dataset4 = ImageDataset("/run/media/gerben/LinuxData/data/celeba/cropped_faces64",
+                            transform=transforms.Compose([
+                               transforms.ToTensor()
+                           ])
+                            )
+
+    train(dataset4,
+          n_shifting_steps=10000,
+          n_static_steps=10000,
           batch_size=16,
-          latent_size=256,
-          h_size=16,
-          lr=0.01,
+          latent_size=64,
+          h_size=64,
+          lr=0.001,
           gamma=750.0,
           max_upscales=4,
           network_scaling_factor=2.0,
-          lrn_in_G=False,
-          wn_in_G=True,
+          lrn_in_G=True,
+          wn_in_G=False,
           start_phase=0,
           progress_bar=True,
           num_workers=4,
           n_steps_per_output=1000,
           use_special_output_network=True,
-          use_additive_net=True,
-          use_residual_discriminator=True,
+          use_additive_net=False,
+          use_residual_discriminator=False,
           max_h_size=256,
-          train_encoder=True
+          train_encoder=False
           )
