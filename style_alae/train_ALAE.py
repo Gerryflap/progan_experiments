@@ -21,7 +21,7 @@ def train(
         dataset,
         n_shifting_steps=20000,
         n_static_steps=20000,
-        batch_sizes=16,                      # Can be an array for each phase or int
+        batch_size=16,
         latent_size=256,
         h_size=8,
         lr=0.001,
@@ -45,17 +45,14 @@ def train(
     n_static_steps_taken = 0
     n_shifting_steps_taken = 0
     static = True
-    if isinstance(batch_sizes, list):
-        batch_size = batch_sizes[0]
-    else:
-        batch_size = batch_sizes
+
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=True)
 
     G = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
     E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
-    Fnet = init_F_net(latent_size, 4)
+    Fnet = init_F_net(latent_size, 5)
 
     D = init_D_net(latent_size, 3)
 
@@ -68,6 +65,7 @@ def train(
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
     E_opt = torch.optim.Adam(E.parameters(), lr=lr, betas=(0, 0.99))
     F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr*0.01, betas=(0, 0.99))
+    # F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr*0.1, betas=(0, 0.99))
 
     if load_path is not None:
         print("ERROR: load path not supported")
@@ -105,150 +103,138 @@ def train(
         test_x = info["test_x"]
     last_print = None
 
-    iter = loader.__iter__()
     while True:
-        try:
-            batch = iter.__next__()
-        except StopIteration:
-            iter = loader.__iter__()
-            batch = iter.__next__()
-
-
-        if static:
-            n_static_steps_taken += 1
-        else:
-            n_shifting_steps_taken += 1
-
-        phase = min(start_phase + (n_shifting_steps_taken / n_shifting_steps), max_upscales)
-
-        x, _ = batch
-        x = x.cuda()
-
-        if test_x is None:
-            test_x = x
-
-        x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
-        # =========== Train D ========
-        D_opt.zero_grad()
-        E_opt.zero_grad()
-
-        x.requires_grad = True
-        d_real_outputs = D(E(x, phase=phase))
-
-        grad_outputs = torch.ones_like(d_real_outputs)
-        grad = torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
-            0]
-        grad_norm = torch.sum(grad.pow(2.0), dim=[1, 2, 3])
-        d_grad_loss = grad_norm.mean()
-
-        d_reg = (gamma / 2.0) * d_grad_loss
-
-        z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-        w_fake = Fnet(z)
-        fake_batch = G(w_fake, phase=phase)
-
-        # Compute outputs for fake images
-        d_fake_outputs = D(E(fake_batch, phase=phase))
-
-        # Compute losses
-        d_loss = F.softplus(d_fake_outputs).mean() + F.softplus(-d_real_outputs).mean() + d_reg
-
-        d_loss.backward()
-
-        # Update weights
-        D_opt.step()
-        E_opt.step()
-
-        # ======== Train G ========
-        # Make gradients for G zero
-        G_opt.zero_grad()
-        F_opt.zero_grad()
-
-        # Generate a batch of fakes
-        z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-        w_fake = Fnet(z)
-        fake_batch = G(w_fake, phase=phase)
-
-        # Compute loss for G, images should become more 'real' to the discriminator
-        g_loss = F.softplus(-D(E(fake_batch, phase=phase))).mean()
-        g_loss.backward()
-
-        G_opt.step()
-        F_opt.step()
-
-        # Step 3: Update E and G
-        E_opt.zero_grad()
-        G_opt.zero_grad()
-        z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-        w = Fnet(z)
-        w_recon = E(G(w, phase=phase), phase=phase)
-        loss = F.mse_loss(w_recon, w)
-        loss.backward()
-        E_opt.step()
-        G_opt.step()
-
-        if progress_bar:
-            percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
-                        n_steps_per_output / 100.0)
-            print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
-
-        if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
-            if progress_bar:
-                print(" "*50, end="\r", flush=True)
-            print("Print at ", n_static_steps_taken, n_shifting_steps_taken, phase)
-            if first_print:
-                torchvision.utils.save_image(x, os.path.join(output_path, "reals.png"))
-                first_print = False
-                last_print = time.time()
+        for batch in loader:
+            if static:
+                n_static_steps_taken += 1
             else:
-                current_time = time.time()
-                diff = current_time - last_print
-                per_step = diff/n_steps_per_output
-                last_print = current_time
-                print("Seconds since last print: %.2f, seconds per step: %.5f"%(diff, per_step))
+                n_shifting_steps_taken += 1
 
-            print("D loss: ", d_loss.detach().cpu().item())
-            print("G loss: ", g_loss.detach().cpu().item())
-            print("w loss", loss.detach().cpu().item())
+            phase = min(start_phase + (n_shifting_steps_taken / n_shifting_steps), max_upscales)
+
+            x, _ = batch
+            x = x.cuda()
+
+            if test_x is None:
+                test_x = x
+
+            x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
+            # =========== Train D ========
+            D_opt.zero_grad()
+            E_opt.zero_grad()
+
+            x.requires_grad = True
+            d_real_outputs = D(E(x, phase=phase))
+
+            grad_outputs = torch.ones_like(d_real_outputs)
+            grad = torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
+                0]
+            grad_norm = torch.sum(grad.pow(2.0), dim=[1, 2, 3])
+            d_grad_loss = grad_norm.mean()
+
+            d_reg = (gamma / 2.0) * d_grad_loss
+
+            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+            w_fake = Fnet(z)
+            fake_batch = G(w_fake, phase=phase)
+
+            # Compute outputs for fake images
+            d_fake_outputs = D(E(fake_batch, phase=phase))
+
+            # Compute losses
+            d_loss = F.softplus(d_fake_outputs).mean() + F.softplus(-d_real_outputs).mean() + d_reg
+
+            d_loss.backward()
+
+            # Update weights
+            D_opt.step()
+            E_opt.step()
+
+            # ======== Train G ========
+            # Make gradients for G zero
+            G_opt.zero_grad()
+            F_opt.zero_grad()
+
+            # Generate a batch of fakes
+            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+            w_fake = Fnet(z)
+            fake_batch = G(w_fake, phase=phase)
+
+            # Compute loss for G, images should become more 'real' to the discriminator
+            g_loss = F.softplus(-D(E(fake_batch, phase=phase))).mean()
+            g_loss.backward()
+
+            G_opt.step()
+            F_opt.step()
+
+            # Step 3: Update E and G
+            E_opt.zero_grad()
+            G_opt.zero_grad()
+            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+            w = Fnet(z)
+            w_recon = E(G(w, phase=phase), phase=phase)
+            loss = F.mse_loss(w_recon, w)
+            loss.backward()
+            E_opt.step()
+            G_opt.step()
+
+            if progress_bar:
+                percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
+                            n_steps_per_output / 100.0)
+                print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
+
+            if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
+                if progress_bar:
+                    print(" "*50, end="\r", flush=True)
+                print("Print at ", n_static_steps_taken, n_shifting_steps_taken, phase)
+                if first_print:
+                    torchvision.utils.save_image(x, os.path.join(output_path, "reals.png"))
+                    first_print = False
+                    last_print = time.time()
+                else:
+                    current_time = time.time()
+                    diff = current_time - last_print
+                    per_step = diff/n_steps_per_output
+                    last_print = current_time
+                    print("Seconds since last print: %.2f, seconds per step: %.5f"%(diff, per_step))
+
+                print("D loss: ", d_loss.detach().cpu().item())
+                print("G loss: ", g_loss.detach().cpu().item())
+                print("w loss", loss.detach().cpu().item())
 
 
-            print()
+                print()
 
-            test_batch = G(Fnet(test_z), phase=phase)
-            torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
-                n_static_steps_taken, n_shifting_steps_taken, phase)))
-
-
-            x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
-            test_recons = G(E(x_res, phase=phase), phase=phase)
-            torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
-                                         os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (n_static_steps_taken, n_shifting_steps_taken, phase)),
-                                         nrow=batch_size)
+                test_batch = G(Fnet(test_z), phase=phase)
+                torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
+                    n_static_steps_taken, n_shifting_steps_taken, phase)))
 
 
-            torch.save(G, os.path.join(output_path, "G.pt"))
-            torch.save(E, os.path.join(output_path, "E.pt"))
-            torch.save(Fnet, os.path.join(output_path, "F.pt"))
-            info = {
-                "n_stat": n_static_steps_taken,
-                "n_shift": n_shifting_steps_taken,
-                "static": static,
-                "test_z": test_z,
-                "test_x": test_x,
-            }
-            # util.save_checkpoint(os.path.join(output_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, info, enc=encoder, enc_opt=enc_opt)
+                x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
+                test_recons = G(E(x_res, phase=phase), phase=phase)
+                torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
+                                             os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (n_static_steps_taken, n_shifting_steps_taken, phase)),
+                                             nrow=batch_size)
 
-        if static and (n_static_steps_taken % n_static_steps == 0):
-            print("Switching to shift")
-            static = False
-            if isinstance(batch_sizes, list):
-                batch_size = batch_sizes[min(int(phase), len(batch_sizes)-1)]
-                loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers,
-                                    drop_last=True)
-                iter = loader.__iter__()
-        elif (not static) and (n_shifting_steps_taken % n_shifting_steps == 0):
-            print("Switching to static")
-            static = True
+
+                torch.save(G, os.path.join(output_path, "G.pt"))
+                torch.save(E, os.path.join(output_path, "E.pt"))
+                torch.save(Fnet, os.path.join(output_path, "F.pt"))
+                info = {
+                    "n_stat": n_static_steps_taken,
+                    "n_shift": n_shifting_steps_taken,
+                    "static": static,
+                    "test_z": test_z,
+                    "test_x": test_x,
+                }
+                # util.save_checkpoint(os.path.join(output_path, "checkpoint.pt"), G, G_out, D, G_opt, D_opt, info, enc=encoder, enc_opt=enc_opt)
+
+            if static and (n_static_steps_taken % n_static_steps == 0):
+                print("Switching to shift")
+                static = False
+            elif (not static) and (n_shifting_steps_taken % n_shifting_steps == 0):
+                print("Switching to static")
+                static = True
 
 
 if __name__ == "__main__":
@@ -282,13 +268,13 @@ if __name__ == "__main__":
                            ])
                             )
 
-    train(dataset2,
+    train(dataset4,
           n_shifting_steps=5000,
           n_static_steps=5000,
-          batch_sizes=[64, 32, 16, 16],
+          batch_size=16,
           latent_size=256,
-          h_size=16,
-          lr=0.001,
+          h_size=8,
+          lr=0.003,
           gamma=10.0,
           max_upscales=4,
           network_scaling_factor=2.0,

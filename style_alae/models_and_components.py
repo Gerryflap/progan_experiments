@@ -27,8 +27,8 @@ class StyleALAEEncoderBlock(torch.nn.Module):
         self.conv2 = Conv2dNormalizedLR(out_size, out_size, 3, padding=1)
         self.from_rgb = Conv2dNormalizedLR(3, in_size, 1)
 
-        self.aff1 = Conv2dNormalizedLR(out_size*2, w_size, kernel_size=1)
-        self.aff2 = Conv2dNormalizedLR(out_size*2, w_size, kernel_size=1)
+        self.aff1 = Conv2dNormalizedLR(out_size*2, w_size, kernel_size=1, bias=False)
+        self.aff2 = Conv2dNormalizedLR(out_size*2, w_size, kernel_size=1, bias=False)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -61,8 +61,11 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
 
         self.conv2 = Conv2dTransposeNormalizedLR(out_size, out_size, 3, padding=1)
 
-        self.aff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1)
-        self.aff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1)
+        self.Aaff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, bias=False)
+        self.Aaff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, bias=False)
+
+        self.Baff1 = Conv2dNormalizedLR(w_size, out_size, kernel_size=1, bias=False)
+        self.Baff2 = Conv2dNormalizedLR(w_size, out_size, kernel_size=1, bias=False)
 
         self.rgb = Conv2dNormalizedLR(out_size, 3, 1)
 
@@ -71,22 +74,26 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         x = F.sigmoid(x)
         return x
 
-    def forward(self, x, w):
+    def forward(self, x, w, noise):
         if self.is_start:
             x = self.conv1(self.start)
         else:
             x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
             x = self.conv1(x)
+        x = x + self.Baff1(noise)
         x = F.leaky_relu(x, 0.2)
 
-        style1_aff = self.aff1(w)
+
+        style1_aff = self.Aaff1(w)
         ys, yb = style1_aff[:, :self.out_size], style1_aff[:, self.out_size:]
         x = adaIN(x, (ys, yb))
 
         x = self.conv2(x)
+        x += self.Baff2(noise)
         x = F.leaky_relu(x, 0.2)
 
-        style2_aff = self.aff2(w)
+
+        style2_aff = self.Aaff2(w)
         ys, yb = style2_aff[:, :self.out_size], style2_aff[:, self.out_size:]
         x = adaIN(x, (ys, yb))
         return x, self.to_rgb(x)
@@ -129,7 +136,7 @@ class ALAEEncoder(torch.nn.Module):
             x2 = self.layers[n_downscales].from_rgb(x2)
 
             x = alpha * x1 + (1 - alpha) * x2
-            w = alpha * (w1 + w2)
+            w = w1 + w2
 
         for i in range(0, n_downscales + 1):
             layer = self.layers[n_downscales - i]
@@ -160,7 +167,10 @@ class ALAEGenerator(torch.nn.Module):
             self.layer_list.append(StyleALAEGeneratorBlock(inp_channels, outp_channels, w_size))
         self.layers = torch.nn.ModuleList(self.layer_list)
 
-    def forward(self, w, phase=None):
+    def forward(self, w, phase=None, noise=None):
+        if noise is None:
+            noise = torch.normal(0, 1, (w.size(0), self.w_size, 1, 1), device="cuda")
+
         if phase is None:
             phase = self.n_upscales
 
@@ -170,12 +180,12 @@ class ALAEGenerator(torch.nn.Module):
         if alpha == 0.0 and n_upscales >= 1:
             alpha += 1.0
 
-        x, rgb = self.init_layer(None, w)
+        x, rgb = self.init_layer(None, w, noise)
 
         if alpha == 0.0 and n_upscales == 0:
             return rgb
 
-        next_x, next_rgb = self.layers[0](x, w)
+        next_x, next_rgb = self.layers[0](x, w, noise)
 
         n_actual_upscales = n_upscales
         if 0 < alpha < 1:
@@ -183,12 +193,12 @@ class ALAEGenerator(torch.nn.Module):
 
         for i in range(1, min(self.n_upscales, n_actual_upscales)):
             x, rgb = next_x, next_rgb
-            next_x, next_rgb = self.layers[i](x, w)
+            next_x, next_rgb = self.layers[i](x, w, noise)
 
         if alpha == 1.0 and n_upscales > 0:
             return next_rgb
 
-        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2) + alpha * next_rgb
+        out_rgb = (1 - alpha) * F.interpolate(rgb, scale_factor=2, mode='bilinear') + alpha * next_rgb
         return out_rgb
 
 
