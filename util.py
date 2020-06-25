@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+lrelu_gain = (2.0/(1+0.2**2))**0.5
 
 def weights_init(m):
     # This was taken from the PyTorch DCGAN tutorial: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
@@ -36,18 +37,19 @@ def weights_init(m):
 
 
 class Conv2dNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False, gain=lrelu_gain):
         super().__init__()
         self.stride = stride
         self.padding = padding
         self.weight_norm = weight_norm
-        self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
+        self.he_constant = gain / (float(in_channels * kernel_size * kernel_size) ** 0.5)
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
 
         if bias:
             self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
         else:
+            self.bias = None
             self.register_parameter("bias", None)
         self.reset_parameters()
 
@@ -59,18 +61,20 @@ class Conv2dNormalizedLR(torch.nn.Module):
         return x
 
     def reset_parameters(self):
-        self.apply(weights_init)
+        nn.init.normal_(self.weight.data, 0.0, 1.0)
+        if self.bias is not None:
+            nn.init.constant_(self.bias.data, 0)
 
 
 class Conv2dTransposeNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False, gain=lrelu_gain):
         super().__init__()
         self.stride = stride
         self.padding = padding
         self.weight_norm = weight_norm
         # In the ProGAN source code the kernel**2 is also included.
         # I don't understand why, since the input of conv2d transpose is 1x1 as far as I'm aware, but okay.
-        self.he_constant = (2.0 / float(in_channels * kernel_size * kernel_size)) ** 0.5
+        self.he_constant = gain / (float(in_channels * kernel_size * kernel_size) ** 0.5)
 
         self.weight = torch.nn.Parameter(torch.Tensor(in_channels, out_channels, kernel_size, kernel_size))
 
@@ -88,13 +92,14 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
         return x
 
     def reset_parameters(self):
-        self.apply(weights_init)
-
+        nn.init.normal_(self.weight.data, 0.0, 1.0)
+        if self.bias is not None:
+            nn.init.constant_(self.bias.data, 0)
 
 class LinearNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False, learning_rate_factor=1.0):
+    def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False, gain=lrelu_gain):
         super().__init__()
-        self.he_constant = learning_rate_factor * (2.0 / float(in_channels)) ** 0.5
+        self.he_constant = gain / (float(in_channels)**0.5)
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
         self.weight_norm = weight_norm
@@ -113,7 +118,9 @@ class LinearNormalizedLR(torch.nn.Module):
         return x
 
     def reset_parameters(self):
-        self.apply(weights_init)
+        nn.init.normal_(self.weight.data, 0.0, 1.0)
+        if self.bias is not None:
+            nn.init.constant_(self.bias.data, 0)
 
 
 def local_response_normalization(x, eps=1e-8):
@@ -197,3 +204,13 @@ class Reshape(torch.nn.Module):
 
     def forward(self, x):
         return x.view(*self.shape)
+
+
+if __name__ == "__main__":
+    layers = [Conv2dNormalizedLR(10, 10, 3, padding=1) for i in range(10)]
+    for layer in layers:
+        layer.reset_parameters()
+    out = torch.normal(0, 1, (100, 10, 5, 5))
+    for layer in layers:
+        out = torch.nn.functional.leaky_relu(layer(out), 0.2)
+    print(out.mean(), out.std(dim=0).mean())

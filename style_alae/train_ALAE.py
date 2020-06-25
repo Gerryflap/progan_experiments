@@ -28,15 +28,16 @@ def train(
         gamma=10.0,
         max_upscales=4,
         network_scaling_factor=2.0,
-        start_phase=0,                        # Can be used to start at a certain resolution. Only works well for whole numbers.
+        start_phase=0,  # Can be used to start at a certain resolution. Only works well for whole numbers.
         num_workers=0,
         progress_bar=False,
         shuffle=True,
         n_steps_per_output=1000,
-        max_h_size=None,                    # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
-        load_path=None,                     # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
+        max_h_size=None,
+        # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
+        load_path=None,
+        # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
 ):
-
     if max_h_size is None:
         max_h_size = int(1e10)
     if num_workers == 0:
@@ -52,7 +53,7 @@ def train(
 
     E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
-    Fnet = init_F_net(latent_size, 5)
+    Fnet = init_F_net(latent_size, 8)
 
     D = init_D_net(latent_size, 3)
 
@@ -64,7 +65,7 @@ def train(
     G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
     E_opt = torch.optim.Adam(E.parameters(), lr=lr, betas=(0, 0.99))
-    F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr*0.01, betas=(0, 0.99))
+    F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr * 0.01, betas=(0, 0.99))
     # F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr*0.1, betas=(0, 0.99))
 
     if load_path is not None:
@@ -85,7 +86,7 @@ def train(
     else:
         now = datetime.now()
 
-        output_path = os.path.join("results", "exp_%s"%(now.strftime("%Y%m%d%H%M")))
+        output_path = os.path.join("results", "exp_%s" % (now.strftime("%Y%m%d%H%M")))
         os.mkdir(output_path)
         os.mkdir(os.path.join(output_path, "encoding"))
         info = None
@@ -127,7 +128,8 @@ def train(
             d_real_outputs = D(E(x, phase=phase))
 
             grad_outputs = torch.ones_like(d_real_outputs)
-            grad = torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
+            grad = \
+            torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
                 0]
             grad_norm = torch.sum(grad.pow(2.0), dim=[1, 2, 3])
             d_grad_loss = grad_norm.mean()
@@ -170,8 +172,9 @@ def train(
             # Step 3: Update E and G
             E_opt.zero_grad()
             G_opt.zero_grad()
-            z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
-            w = Fnet(z)
+            with torch.no_grad():
+                z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
+                w = Fnet(z)
             w_recon = E(G(w, phase=phase), phase=phase)
             loss = F.mse_loss(w_recon, w)
             loss.backward()
@@ -180,12 +183,12 @@ def train(
 
             if progress_bar:
                 percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
-                            n_steps_per_output / 100.0)
+                        n_steps_per_output / 100.0)
                 print("%03d %% till image generation..." % int(percent), end="\r", flush=True)
 
             if (n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output == 0:
                 if progress_bar:
-                    print(" "*50, end="\r", flush=True)
+                    print(" " * 50, end="\r", flush=True)
                 print("Print at ", n_static_steps_taken, n_shifting_steps_taken, phase)
                 if first_print:
                     torchvision.utils.save_image(x, os.path.join(output_path, "reals.png"))
@@ -194,14 +197,13 @@ def train(
                 else:
                     current_time = time.time()
                     diff = current_time - last_print
-                    per_step = diff/n_steps_per_output
+                    per_step = diff / n_steps_per_output
                     last_print = current_time
-                    print("Seconds since last print: %.2f, seconds per step: %.5f"%(diff, per_step))
+                    print("Seconds since last print: %.2f, seconds per step: %.5f" % (diff, per_step))
 
                 print("D loss: ", d_loss.detach().cpu().item())
                 print("G loss: ", g_loss.detach().cpu().item())
                 print("w loss", loss.detach().cpu().item())
-
 
                 print()
 
@@ -209,13 +211,12 @@ def train(
                 torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase)))
 
-
                 x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
                 test_recons = G(E(x_res, phase=phase), phase=phase)
                 torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
-                                             os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (n_static_steps_taken, n_shifting_steps_taken, phase)),
+                                             os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (
+                                             n_static_steps_taken, n_shifting_steps_taken, phase)),
                                              nrow=batch_size)
-
 
                 torch.save(G, os.path.join(output_path, "G.pt"))
                 torch.save(E, os.path.join(output_path, "E.pt"))
@@ -252,35 +253,35 @@ if __name__ == "__main__":
 
     dataset2 = ImageDataset("/run/media/gerben/LinuxData/data/frgc_cropped",
                             transform=transforms.Compose([
-                               transforms.ToTensor()
-                           ])
+                                transforms.ToTensor()
+                            ])
                             )
 
     dataset3 = ImageDataset("/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128",
                             transform=transforms.Compose([
-                               transforms.ToTensor()
-                           ])
+                                transforms.ToTensor()
+                            ])
                             )
 
     dataset4 = ImageDataset("/run/media/gerben/LinuxData/data/celeba/cropped_faces64",
                             transform=transforms.Compose([
-                               transforms.ToTensor()
-                           ])
+                                transforms.ToTensor()
+                            ])
                             )
 
     train(dataset4,
           n_shifting_steps=5000,
           n_static_steps=5000,
           batch_size=16,
-          latent_size=256,
-          h_size=8,
-          lr=0.003,
+          latent_size=128,
+          h_size=24,
+          lr=0.001,
           gamma=10.0,
           max_upscales=4,
           network_scaling_factor=2.0,
-          start_phase=0,
+          start_phase=1,
           progress_bar=False,
           num_workers=4,
           n_steps_per_output=1000,
-          max_h_size=256,
+          max_h_size=128,
           )
