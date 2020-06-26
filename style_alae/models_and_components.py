@@ -63,11 +63,11 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         self.out_size = out_size
 
         if not is_start:
-            self.conv1 = Conv2dNormalizedLR(in_size, out_size, 3, padding=1)
+            self.conv1 = Conv2dTransposeNormalizedLR(in_size, out_size, 3, padding=1)
         else:
             self.start = torch.nn.Parameter(torch.ones((1, out_size, 4, 4)), requires_grad=True)
 
-        self.conv2 = Conv2dNormalizedLR(out_size, out_size, 3, padding=1)
+        self.conv2 = Conv2dTransposeNormalizedLR(out_size, out_size, 3, padding=1)
 
         self.Aaff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
         self.Aaff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
@@ -77,12 +77,12 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         self.Baff1b = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
         self.Baff2b = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
 
-        self.rgb = Conv2dNormalizedLR(out_size, 3, 1, gain=0.3)
+        self.rgb = Conv2dNormalizedLR(out_size, 3, 1, gain=0.03)
         self.reset_parameters()
 
     def to_rgb(self, x):
         x = self.rgb(x)
-        x = F.sigmoid(x)
+        # x = F.sigmoid(x)
         return x
 
     def forward(self, x, w):
@@ -172,7 +172,7 @@ class ALAEEncoder(torch.nn.Module):
             x2 = self.layers[n_downscales].from_rgb(x2)
 
             x = alpha * x1 + (1 - alpha) * x2
-            w = w1 + w2
+            w = alpha * (w1 + w2)
 
         for i in range(0, n_downscales + 1):
             layer = self.layers[n_downscales - i]

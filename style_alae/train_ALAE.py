@@ -207,16 +207,16 @@ def train(
 
                 print()
 
-                test_batch = G(Fnet(test_z), phase=phase)
+                test_batch = torch.clamp(G(Fnet(test_z), phase=phase).detach(), 0, 1)
                 torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase)))
 
                 x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
-                test_recons = G(E(x_res, phase=phase), phase=phase)
+                test_recons = torch.clamp(G(E(x_res, phase=phase), phase=phase).detach(), 0, 1)
                 torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
                                              os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (
                                              n_static_steps_taken, n_shifting_steps_taken, phase)),
-                                             nrow=batch_size)
+                                             nrow=min(16, batch_size))
 
                 torch.save(G, os.path.join(output_path, "G.pt"))
                 torch.save(E, os.path.join(output_path, "E.pt"))
