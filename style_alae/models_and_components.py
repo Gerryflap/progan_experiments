@@ -63,11 +63,11 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         self.out_size = out_size
 
         if not is_start:
-            self.conv1 = Conv2dTransposeNormalizedLR(in_size, out_size, 3, padding=1)
+            self.conv1 = Conv2dNormalizedLR(in_size, out_size, 3, padding=1)
         else:
             self.start = torch.nn.Parameter(torch.ones((1, out_size, 4, 4)), requires_grad=True)
 
-        self.conv2 = Conv2dTransposeNormalizedLR(out_size, out_size, 3, padding=1)
+        self.conv2 = Conv2dNormalizedLR(out_size, out_size, 3, padding=1)
 
         self.Aaff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
         self.Aaff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)

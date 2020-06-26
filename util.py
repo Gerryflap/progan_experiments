@@ -205,6 +205,12 @@ class Reshape(torch.nn.Module):
     def forward(self, x):
         return x.view(*self.shape)
 
+class ToColorTransform(object):
+    def __call__(self, img):
+        out = torch.cat([img]*3, dim=0)
+        return out
+
+
 
 if __name__ == "__main__":
     layers = [Conv2dNormalizedLR(10, 10, 3, padding=1) for i in range(10)]

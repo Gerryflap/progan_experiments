@@ -117,7 +117,7 @@ def train(
             x = x.cuda()
 
             if test_x is None:
-                test_x = x
+                test_x = x[:16]
 
             x = F.interpolate(x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
             # =========== Train D ========
@@ -239,7 +239,7 @@ def train(
 
 
 if __name__ == "__main__":
-    from torchvision.datasets import CelebA
+    from torchvision.datasets import CelebA, MNIST
 
     dataset = CelebA("/run/media/gerben/LinuxData/data/", download=False,
                      transform=transforms.Compose([
@@ -269,19 +269,25 @@ if __name__ == "__main__":
                             ])
                             )
 
-    train(dataset4,
-          n_shifting_steps=5000,
-          n_static_steps=5000,
-          batch_size=16,
-          latent_size=128,
-          h_size=24,
+    mnist = MNIST("mnist_data", transform=transforms.Compose([
+                                transforms.Resize(32),
+                                transforms.ToTensor(),
+                                util.ToColorTransform()
+                            ]), download=True)
+
+    train(mnist,
+          n_shifting_steps=1000,
+          n_static_steps=1000,
+          batch_size=128,
+          latent_size=32,
+          h_size=12,
           lr=0.001,
           gamma=10.0,
-          max_upscales=4,
+          max_upscales=3,
           network_scaling_factor=2.0,
           start_phase=1,
           progress_bar=False,
           num_workers=4,
-          n_steps_per_output=1000,
+          n_steps_per_output=200,
           max_h_size=128,
           )
