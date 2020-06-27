@@ -275,13 +275,13 @@ if __name__ == "__main__":
                                 util.ToColorTransform()
                             ]), download=True)
 
-    train(mnist,
+    train(dataset2,
           n_shifting_steps=1000,
           n_static_steps=1000,
           batch_size=128,
           latent_size=32,
-          h_size=12,
-          lr=0.001,
+          h_size=24,
+          lr=0.002,
           gamma=10.0,
           max_upscales=3,
           network_scaling_factor=2.0,
