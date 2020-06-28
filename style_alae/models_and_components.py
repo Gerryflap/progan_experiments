@@ -63,11 +63,13 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         self.out_size = out_size
 
         if not is_start:
-            self.conv1 = Conv2dTransposeNormalizedLR(in_size, out_size, 3, padding=1)
+            self.conv1 = Conv2dTransposeNormalizedLR(in_size, out_size, 3, padding=1, bias=False)
         else:
             self.start = torch.nn.Parameter(torch.ones((1, out_size, 4, 4)), requires_grad=True)
+        self.bias1 = torch.nn.Parameter(torch.zeros((1, out_size, 1, 1)))
 
-        self.conv2 = Conv2dTransposeNormalizedLR(out_size, out_size, 3, padding=1)
+        self.conv2 = Conv2dTransposeNormalizedLR(out_size, out_size, 3, padding=1, bias=False)
+        self.bias2 = torch.nn.Parameter(torch.zeros((1, out_size, 1, 1)))
 
         self.Aaff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
         self.Aaff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
@@ -95,6 +97,7 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         noise_ys = self.Baff1s(noise)
         noise_yb = self.Baff1b(noise)
         x = x * noise_ys + noise_yb
+        x = x + self.bias1
         x = F.leaky_relu(x, 0.2)
 
 
@@ -107,6 +110,7 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         noise_ys = self.Baff2s(noise)
         noise_yb = self.Baff2b(noise)
         x = x * noise_ys + noise_yb
+        x = x + self.bias2
         x = F.leaky_relu(x, 0.2)
 
 
