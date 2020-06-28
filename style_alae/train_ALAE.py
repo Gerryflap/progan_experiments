@@ -10,11 +10,9 @@ import torch.nn.functional as F
 import torch
 
 import util
-from models import ProGANDiscriminator, ProGANGenerator
 
 # Algo
-from models_additional import ProGANAdditiveGenerator, ProGANResDiscriminator, ProGANResEncoder
-from style_alae.models_and_components import ALAEGenerator, ALAEEncoder, init_F_net, init_D_net
+from style_alae.models_and_components import ALAEGenerator, ALAEEncoder,  Fnetwork, Discriminator
 
 
 def train(
@@ -53,9 +51,9 @@ def train(
 
     E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
-    Fnet = init_F_net(latent_size, 8)
+    Fnet = Fnetwork(latent_size, 8)
 
-    D = init_D_net(latent_size, 3)
+    D = Discriminator(latent_size, 3)
 
     G = G.cuda()
     D = D.cuda()
@@ -275,7 +273,7 @@ if __name__ == "__main__":
                                 util.ToColorTransform()
                             ]), download=True)
 
-    train(dataset2,
+    train(mnist,
           n_shifting_steps=1000,
           n_static_steps=1000,
           batch_size=128,

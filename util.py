@@ -210,7 +210,9 @@ class ToColorTransform(object):
         out = torch.cat([img]*3, dim=0)
         return out
 
-
+def pixel_norm(x, epsilon=1e-8):
+    # This function is taken from ALAE (https://github.com/podgorskiy/ALAE/)
+    return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
 
 if __name__ == "__main__":
     layers = [Conv2dNormalizedLR(10, 10, 3, padding=1) for i in range(10)]

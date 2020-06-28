@@ -1,6 +1,6 @@
 import torch
 
-from util import Conv2dNormalizedLR, LinearNormalizedLR, Conv2dTransposeNormalizedLR, Reshape
+from util import Conv2dNormalizedLR, LinearNormalizedLR, Conv2dTransposeNormalizedLR, Reshape, pixel_norm
 import torch.nn.functional as F
 
 
@@ -247,34 +247,51 @@ class ALAEGenerator(torch.nn.Module):
             layer.reset_parameters()
 
 
-def init_F_net(latent_size, n_layers):
-    layers = []
-    for i in range(n_layers):
-        last_layer = i == n_layers - 1
-        layers.append(LinearNormalizedLR(latent_size, latent_size))
-        if not last_layer:
-            layers.append(torch.nn.LeakyReLU(0.2))
-        else:
-            layers.append(Reshape((-1, latent_size, 1, 1)))
-    for layer in layers:
-        if isinstance(layer, LinearNormalizedLR):
+class Discriminator(torch.nn.Module):
+    def __init__(self, latent_size, n_layers=3):
+        super().__init__()
+        self.latent_size = latent_size
+        self.n_layers = n_layers
+        self.layers = []
+        for i in range(n_layers):
+            out_size = (self.latent_size if (i != n_layers-1) else 1)
+            self.layers.append(LinearNormalizedLR(latent_size, out_size))
+        self.params = torch.nn.ModuleList(self.layers)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for layer in self.layers:
             layer.reset_parameters()
-    return torch.nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = x.view(-1, self.latent_size)
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i != len(self.layers) - 1:
+                x = F.leaky_relu(x, 0.2)
+        return x
 
 
-def init_D_net(latent_size, n_layers):
-    layers = [Reshape((-1, latent_size))]
-    for i in range(n_layers):
-        last_layer = i == n_layers - 1
-        if last_layer:
-            out = 1
-        else:
-            out = latent_size
-        layers.append(LinearNormalizedLR(latent_size, out))
-        if not last_layer:
-            layers.append(torch.nn.LeakyReLU(0.2))
+class Fnetwork(torch.nn.Module):
+    def __init__(self, latent_size, n_layers=8):
+        super().__init__()
+        self.latent_size = latent_size
+        self.n_layers = n_layers
+        self.layers = []
+        for i in range(n_layers):
+            self.layers.append(LinearNormalizedLR(latent_size, latent_size))
+        self.params = torch.nn.ModuleList(self.layers)
+        self.reset_parameters()
 
-    for layer in layers:
-        if isinstance(layer, LinearNormalizedLR):
+    def reset_parameters(self):
+        for layer in self.layers:
             layer.reset_parameters()
-    return torch.nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = pixel_norm(x)
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i != len(self.layers) - 1:
+                x = F.leaky_relu(x, 0.2)
+
+        return x.view(-1, self.latent_size, 1, 1)

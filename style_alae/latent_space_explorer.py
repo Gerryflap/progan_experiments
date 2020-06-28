@@ -28,7 +28,7 @@ Fnet.eval()
 generator.eval()
 
 
-z_shape = 256
+z_shape = 32
 max_phase = generator.n_upscales
 print(generator.init_layer.Baff1s.weight)
 print(generator.init_layer.Baff1s.bias)
