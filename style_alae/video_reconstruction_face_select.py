@@ -39,7 +39,7 @@ detector = dlib.get_frontal_face_detector()
 sp = dlib.shape_predictor(predictor_path)
 
 z_size = 256
-phase = 3.267
+phase = 4.0
 resolution = int(Gx(torch.zeros((1, z_size, 1, 1), device="cuda"), phase=phase).size()[2])
 print(resolution)
 real_resolution = resolution
@@ -68,8 +68,8 @@ def update():
     for detection in dets:
         faces.append(sp(frame, detection))
 
-    frame = dlib.get_face_chip(frame, faces[0], size=64*2)
-    frame = frame[::2, ::2]
+    frame = dlib.get_face_chip(frame, faces[0], size=64)
+    #frame = frame[::2, ::2]
 
 
 
