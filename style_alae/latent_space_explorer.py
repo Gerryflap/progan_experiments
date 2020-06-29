@@ -22,16 +22,18 @@ init_dir = os.path.split(filenameF)[0]
 filenameG = tk.filedialog.askopenfilename(initialdir=init_dir, title="Select G",
                                            filetypes=(("Pytorch model", "*.pt"), ("all files", "*.*")))
 root.destroy()
-Fnet = torch.load(filenameF)
-generator = torch.load(filenameG)
+Fnet = torch.load(filenameF, map_location=torch.device("cuda"))
+generator = torch.load(filenameG, map_location=torch.device("cuda"))
 Fnet.eval()
 generator.eval()
 
+print([param.size() for param in generator.init_layer.parameters()])
 
-z_shape = 32
+
+z_shape = Fnet.latent_size
 max_phase = generator.n_upscales
-print(generator.init_layer.Baff1s.weight)
-print(generator.init_layer.Baff1s.bias)
+print(generator.init_layer.Baff1s.weight.mean())
+print(generator.init_layer.Baff1s.bias.mean())
 
 phase = max_phase
 z = np.zeros((1, z_shape), dtype=np.float32)
@@ -64,12 +66,12 @@ def dankify():
         slider.set(4.20)
 
 
-def load_z():
+def load_w():
     global should_update
     should_update = False
-    z = np.load("z.npy")
-    for i, slider in enumerate(sliders):
-        slider.set(z[0, i])
+    w = torch.from_numpy(np.load("w.npy")).cuda()
+    set_img_from_w(w)
+
 
 
 def update_and_enable_updates(iets):
@@ -77,19 +79,9 @@ def update_and_enable_updates(iets):
     should_update = True
     update_canvas(iets)
 
-
-def update_canvas(iets):
+def set_img_from_w(w):
     global image
     global orig_img
-    global should_update
-
-    if not should_update:
-        return
-
-    for i in range(len(sliders)):
-        z[0, i] = sliders[i].get()
-    # array = G(z).eval(session=K.get_session())[0]
-    w = Fnet(torch.from_numpy(z).cuda())
     array = generator(w, phase=phase)[0]
 
     array = torch.clamp(array, 0, 1)
@@ -108,6 +100,21 @@ def update_canvas(iets):
     img = ImageTk.PhotoImage(image=img)
     image = img
     canvas.create_image(0, 0, anchor="nw", image=image)
+
+
+def update_canvas(iets):
+    global image
+    global orig_img
+    global should_update
+
+    if not should_update:
+        return
+
+    for i in range(len(sliders)):
+        z[0, i] = sliders[i].get()
+    # array = G(z).eval(session=K.get_session())[0]
+    w = Fnet(torch.from_numpy(z).cuda())
+    set_img_from_w(w)
 
 def phase_switch(iets):
     global phase
@@ -180,7 +187,7 @@ save_button.pack()
 randomize_button = tk.Button(left_frame, text="Randomize", command=randomize)
 randomize_button.pack()
 
-load_z_button = tk.Button(left_frame, text="Load_z", command=load_z)
+load_z_button = tk.Button(left_frame, text="Load_z", command=load_w)
 load_z_button.pack()
 
 left_frame.pack(side=tk.LEFT)

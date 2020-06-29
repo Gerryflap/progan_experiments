@@ -38,7 +38,7 @@ predictor_path = "shape_predictor_5_face_landmarks.dat"
 detector = dlib.get_frontal_face_detector()
 sp = dlib.shape_predictor(predictor_path)
 
-z_size = 256
+z_size = Gx.w_size
 phase = 4.0
 resolution = int(Gx(torch.zeros((1, z_size, 1, 1), device="cuda"), phase=phase).size()[2])
 print(resolution)

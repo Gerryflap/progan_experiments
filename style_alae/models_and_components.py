@@ -93,7 +93,7 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         else:
             x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
             x = self.conv1(x)
-        noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device="cuda")
+        noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device=w.device)
         noise_ys = self.Baff1s(noise)
         noise_yb = self.Baff1b(noise)
         x = x * noise_ys + noise_yb
@@ -106,7 +106,7 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         x = adaIN(x, (ys, yb))
 
         x = self.conv2(x)
-        noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device="cuda")
+        noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device=w.device)
         noise_ys = self.Baff2s(noise)
         noise_yb = self.Baff2b(noise)
         x = x * noise_ys + noise_yb
