@@ -194,8 +194,8 @@ def apply_weight_norm(w, input_dims=(1, 2, 3), eps=1e-8):
     :param w: Weights
     :return: Normed weights
     """
-    divisor = torch.rsqrt(torch.square(w).sum(dim=input_dims, keepdim=True) + eps)
-    return w * divisor
+    divisor = torch.sqrt(torch.square(w).sum(dim=input_dims, keepdim=True) + eps)
+    return w / divisor
 
 class Reshape(torch.nn.Module):
     def __init__(self, shape):

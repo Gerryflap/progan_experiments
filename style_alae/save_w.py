@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description="Image to latent vector converter."
 parser.add_argument("--enc", action="store", type=str, help="Path to Gz/Encoder model")
 parser.add_argument("--img", action="store", type=str, help="Path to input image")
 parser.add_argument("--img2", action="store", type=str, default=None, help="Path to second input image (when morphing)")
-parser.add_argument("--phase", action="store", type=int, help="Model phase", default=4.0)
+parser.add_argument("--phase", action="store", type=float, help="Model phase", default=4.0)
 
 parser.add_argument("--fix_contrast", action="store_true", default=False,
                     help="If true, makes sure that the colors in the image span from 0-255")

@@ -13,6 +13,7 @@ import util
 
 # Algo
 from style_alae.models_and_components import ALAEGenerator, ALAEEncoder,  Fnetwork, Discriminator
+from style_alae.stylegan2.models import ALAEGeneratorStyleGAN2
 
 
 def train(
@@ -35,6 +36,7 @@ def train(
         # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
         load_path=None,
         # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
+        use_stylegan2_gen=False
 ):
     if max_h_size is None:
         max_h_size = int(1e10)
@@ -47,7 +49,10 @@ def train(
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=True)
 
-    G = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+    if not use_stylegan2_gen:
+        G = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+    else:
+        G = ALAEGeneratorStyleGAN2(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
     E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
@@ -273,19 +278,20 @@ if __name__ == "__main__":
                                 util.ToColorTransform()
                             ]), download=True)
 
-    train(mnist,
-          n_shifting_steps=1000,
-          n_static_steps=1000,
-          batch_size=128,
-          latent_size=32,
+    train(dataset3,
+          n_shifting_steps=10000,
+          n_static_steps=10000,
+          batch_size=16,
+          latent_size=256,
           h_size=24,
           lr=0.002,
           gamma=10.0,
-          max_upscales=3,
+          max_upscales=4,
           network_scaling_factor=2.0,
-          start_phase=1,
+          start_phase=4,
           progress_bar=False,
           num_workers=4,
-          n_steps_per_output=200,
-          max_h_size=128,
+          n_steps_per_output=1000,
+          max_h_size=256,
+          use_stylegan2_gen=True
           )

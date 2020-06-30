@@ -32,8 +32,6 @@ print([param.size() for param in generator.init_layer.parameters()])
 
 z_shape = Fnet.latent_size
 max_phase = generator.n_upscales
-print(generator.init_layer.Baff1s.weight.mean())
-print(generator.init_layer.Baff1s.bias.mean())
 
 phase = max_phase
 z = np.zeros((1, z_shape), dtype=np.float32)
