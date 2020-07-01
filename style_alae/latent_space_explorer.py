@@ -34,7 +34,10 @@ z_shape = Fnet.latent_size
 max_phase = generator.n_upscales
 
 phase = max_phase
+mean_w = None
+truncation_psi = 1.0
 z = np.zeros((1, z_shape), dtype=np.float32)
+current_w = None
 
 
 def set_should_update():
@@ -66,10 +69,22 @@ def dankify():
 
 def load_w():
     global should_update
+    global current_w
     should_update = False
     w = torch.from_numpy(np.load("w.npy")).cuda()
-    set_img_from_w(w)
+    current_w = w
+    set_img_from_w()
+    should_update = True
 
+def truncate_w(w):
+    global mean_w
+    global truncation_psi
+    if mean_w is None or truncation_psi == 1.0:
+        return w
+    else:
+        wp = mean_w + truncation_psi * (w - mean_w)
+        print((w - wp).sum())
+        return wp
 
 
 def update_and_enable_updates(iets):
@@ -77,9 +92,12 @@ def update_and_enable_updates(iets):
     should_update = True
     update_canvas(iets)
 
-def set_img_from_w(w):
+def set_img_from_w():
     global image
     global orig_img
+    global current_w
+    w = current_w
+    w = truncate_w(w)
     array = generator(w, phase=phase)[0]
 
     array = torch.clamp(array, 0, 1)
@@ -99,11 +117,11 @@ def set_img_from_w(w):
     image = img
     canvas.create_image(0, 0, anchor="nw", image=image)
 
-
 def update_canvas(iets):
     global image
     global orig_img
     global should_update
+    global current_w
 
     if not should_update:
         return
@@ -112,12 +130,22 @@ def update_canvas(iets):
         z[0, i] = sliders[i].get()
     # array = G(z).eval(session=K.get_session())[0]
     w = Fnet(torch.from_numpy(z).cuda())
-    set_img_from_w(w)
+    current_w = w
+    set_img_from_w()
 
 def phase_switch(iets):
     global phase
     phase = phase_slider.get()
-    update_canvas(iets)
+    set_img_from_w()
+
+def truncation_switch(iets):
+    global truncation_psi
+    global mean_w
+    if mean_w is None:
+        samples = torch.normal(0, 1, (100, z_shape), device="cuda")
+        mean_w = Fnet(samples).mean(dim=0, keepdim=True)
+    truncation_psi = truncation_slider.get()
+    set_img_from_w()
 
 
 root = tk.Tk()
@@ -131,6 +159,10 @@ canvas.pack()
 phase_slider = tk.Scale(root, from_=0, to_=max_phase, resolution=0.1, length=290, orient=tk.HORIZONTAL, command=phase_switch)
 phase_slider.pack()
 phase_slider.set(max_phase)
+
+truncation_slider = tk.Scale(root, from_=-1.0, to_=1.5, resolution=0.1, length=290, orient=tk.HORIZONTAL, command=truncation_switch)
+truncation_slider.pack()
+truncation_slider.set(1.0)
 
 scrollbar = tk.Scrollbar(root)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)

@@ -129,10 +129,11 @@ def train(
             D_opt.zero_grad()
             E_opt.zero_grad()
 
-            x.requires_grad = True
+            apply_reg = (n_static_steps_taken + n_shifting_steps_taken) % reg_every_n_steps == 0
+            if apply_reg:
+                x.requires_grad = True
             d_real_outputs = D(E(x, phase=phase))
 
-            apply_reg = (n_static_steps_taken + n_shifting_steps_taken) % reg_every_n_steps == 0
             if apply_reg:
                 grad_outputs = torch.ones_like(d_real_outputs)
                 grad = \
@@ -267,7 +268,7 @@ if __name__ == "__main__":
                             ])
                             )
 
-    dataset3 = ImageDataset("/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128",
+    dataset3 = ImageDataset("/run/media/gerben/LinuxData/data/ffhq_thumbnails/aligned64",
                             transform=transforms.Compose([
                                 transforms.ToTensor()
                             ])
@@ -285,21 +286,21 @@ if __name__ == "__main__":
                                 util.ToColorTransform()
                             ]), download=True)
 
-    train(dataset2,
+    train(dataset3,
           n_shifting_steps=10000,
           n_static_steps=10000,
           batch_size=16,
           latent_size=256,
-          h_size=32,
+          h_size=64,
           lr=0.002,
           gamma=10.0,
           max_upscales=3,
           network_scaling_factor=2.0,
-          start_phase=3,
+          start_phase=1,
           progress_bar=False,
           num_workers=4,
           n_steps_per_output=1000,
           max_h_size=256,
-          use_stylegan2_gen=True,
-          reg_every_n_steps=8
+          use_stylegan2_gen=False,
+          reg_every_n_steps=1
           )
