@@ -19,10 +19,12 @@ train(dataset,
       gamma=10.0,
       max_upscales=4,
       network_scaling_factor=2.0,
-      start_phase=1,
+      start_phase=4,
       progress_bar=False,
       num_workers=0,
       n_steps_per_output=2000,
       max_h_size=512,
+      use_stylegan2_gen=True,
+      reg_every_n_steps=8
       )
 

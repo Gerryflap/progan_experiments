@@ -36,7 +36,9 @@ def train(
         # The maximum size of a hidden later output. None will default to 1e10, which is basically infinite,
         load_path=None,
         # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
-        use_stylegan2_gen=False
+        use_stylegan2_gen=False,
+        reg_every_n_steps=1         # R1 regularization is only applied every n steps. Gamma is multiplied by n.
+
 ):
     if max_h_size is None:
         max_h_size = int(1e10)
@@ -130,14 +132,16 @@ def train(
             x.requires_grad = True
             d_real_outputs = D(E(x, phase=phase))
 
-            grad_outputs = torch.ones_like(d_real_outputs)
-            grad = \
-            torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
-                0]
-            grad_norm = torch.sum(grad.pow(2.0), dim=[1, 2, 3])
-            d_grad_loss = grad_norm.mean()
+            apply_reg = (n_static_steps_taken + n_shifting_steps_taken) % reg_every_n_steps == 0
+            if apply_reg:
+                grad_outputs = torch.ones_like(d_real_outputs)
+                grad = \
+                torch.autograd.grad(d_real_outputs, x, create_graph=True, only_inputs=True, grad_outputs=grad_outputs)[
+                    0]
+                grad_norm = torch.sum(grad.pow(2.0), dim=[1, 2, 3])
+                d_grad_loss = grad_norm.mean()
 
-            d_reg = (gamma / 2.0) * d_grad_loss
+                d_reg = (reg_every_n_steps * gamma / 2.0) * d_grad_loss
 
             z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
             w_fake = Fnet(z)
@@ -147,7 +151,10 @@ def train(
             d_fake_outputs = D(E(fake_batch, phase=phase))
 
             # Compute losses
-            d_loss = F.softplus(d_fake_outputs).mean() + F.softplus(-d_real_outputs).mean() + d_reg
+            d_loss = F.softplus(d_fake_outputs).mean() + F.softplus(-d_real_outputs).mean()
+
+            if apply_reg:
+                d_loss = d_loss + d_reg
 
             d_loss.backward()
 
@@ -278,20 +285,21 @@ if __name__ == "__main__":
                                 util.ToColorTransform()
                             ]), download=True)
 
-    train(dataset3,
+    train(dataset2,
           n_shifting_steps=10000,
           n_static_steps=10000,
           batch_size=16,
           latent_size=256,
-          h_size=24,
+          h_size=32,
           lr=0.002,
           gamma=10.0,
-          max_upscales=4,
+          max_upscales=3,
           network_scaling_factor=2.0,
-          start_phase=4,
+          start_phase=3,
           progress_bar=False,
           num_workers=4,
           n_steps_per_output=1000,
           max_h_size=256,
-          use_stylegan2_gen=True
+          use_stylegan2_gen=True,
+          reg_every_n_steps=8
           )
