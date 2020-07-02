@@ -287,19 +287,19 @@ if __name__ == "__main__":
                             ]), download=True)
 
     train(dataset3,
-          n_shifting_steps=10000,
-          n_static_steps=10000,
+          n_shifting_steps=5000,
+          n_static_steps=5000,
           batch_size=16,
           latent_size=256,
           h_size=64,
-          lr=0.002,
+          lr=0.004,
           gamma=10.0,
           max_upscales=3,
           network_scaling_factor=2.0,
           start_phase=1,
           progress_bar=False,
           num_workers=4,
-          n_steps_per_output=1000,
+          n_steps_per_output=200,
           max_h_size=256,
           use_stylegan2_gen=False,
           reg_every_n_steps=1

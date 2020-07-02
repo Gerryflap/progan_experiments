@@ -49,8 +49,8 @@ class Conv2dNormalizedLR(torch.nn.Module):
         if bias:
             self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
         else:
-            self.bias = None
             self.register_parameter("bias", None)
+            self.bias = None
         self.reset_parameters()
 
     def forward(self, inp):

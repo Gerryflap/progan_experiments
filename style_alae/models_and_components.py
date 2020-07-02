@@ -74,10 +74,8 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         self.Aaff1 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
         self.Aaff2 = Conv2dNormalizedLR(w_size, out_size * 2, kernel_size=1, gain=1.0)
 
-        self.Baff1s = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
-        self.Baff2s = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
-        self.Baff1b = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
-        self.Baff2b = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0)
+        self.Baff1 = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0, bias=False)
+        self.Baff2 = Conv2dNormalizedLR(1, out_size, kernel_size=1, gain=1.0, bias=False)
 
         self.rgb = Conv2dNormalizedLR(out_size, 3, 1, gain=0.03)
         self.reset_parameters()
@@ -94,9 +92,8 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
             x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
             x = self.conv1(x)
         noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device=w.device)
-        noise_ys = self.Baff1s(noise)
-        noise_yb = self.Baff1b(noise)
-        x = x * noise_ys + noise_yb
+        noise_y = self.Baff1(noise)
+        x = x + noise_y
         x = x + self.bias1
         x = F.leaky_relu(x, 0.2)
 
@@ -107,9 +104,8 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
 
         x = self.conv2(x)
         noise = torch.normal(0, 1, (w.size(0), 1, x.size(2), x.size(3)), device=w.device)
-        noise_ys = self.Baff2s(noise)
-        noise_yb = self.Baff2b(noise)
-        x = x * noise_ys + noise_yb
+        noise_y = self.Baff2(noise)
+        x = x + noise_y
         x = x + self.bias2
         x = F.leaky_relu(x, 0.2)
 
@@ -125,14 +121,9 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
         else:
             self.conv1.reset_parameters()
 
-        torch.nn.init.zeros_(self.Baff1s.weight)
-        torch.nn.init.zeros_(self.Baff2s.weight)
-        torch.nn.init.ones_(self.Baff1s.bias)
-        torch.nn.init.ones_(self.Baff2s.bias)
-        torch.nn.init.zeros_(self.Baff1b.weight)
-        torch.nn.init.zeros_(self.Baff2b.weight)
-        torch.nn.init.zeros_(self.Baff1b.bias)
-        torch.nn.init.zeros_(self.Baff2b.bias)
+        torch.nn.init.zeros_(self.Baff1.weight)
+        torch.nn.init.zeros_(self.Baff2.weight)
+
 
         for layer in [self.conv2, self.rgb, self.Aaff1, self.Aaff2]:
             layer.reset_parameters()
