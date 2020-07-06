@@ -15,8 +15,8 @@ dataset2 = ImageDataset("data/aligned64",
                         )
 
 train(dataset2,
-      n_shifting_steps=50000,
-      n_static_steps=50000,
+      n_shifting_steps=30000,
+      n_static_steps=30000,
       batch_size=16,
       latent_size=256,
       h_size=128,
