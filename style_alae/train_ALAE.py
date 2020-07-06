@@ -53,12 +53,15 @@ def train(
 
     if not use_stylegan2_gen:
         G = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        G_out = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
     else:
         G = ALAEGeneratorStyleGAN2(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
-
+        G_out = ALAEGeneratorStyleGAN2(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
     E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+    E_out = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
 
     Fnet = Fnetwork(latent_size, 8)
+    F_out = Fnetwork(latent_size, 8)
 
     D = Discriminator(latent_size, 3)
 
@@ -67,11 +70,23 @@ def train(
     Fnet = Fnet.cuda()
     E = E.cuda()
 
+    G_out = G_out.cuda()
+    F_out = F_out.cuda()
+    E_out = E_out.cuda()
+
+    # Init "output networks" that are more stable
+    util.update_output_network(F_out, Fnet, factor=0.0)
+    util.update_output_network(E_out, E, factor=0.0)
+    util.update_output_network(G_out, G, factor=0.0)
+
     G_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0, 0.99))
     D_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0, 0.99))
     E_opt = torch.optim.Adam(E.parameters(), lr=lr, betas=(0, 0.99))
     F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr * 0.01, betas=(0, 0.99))
     # F_opt = torch.optim.Adam(Fnet.parameters(), lr=lr*0.1, betas=(0, 0.99))
+
+
+
 
     if load_path is not None:
         print("ERROR: load path not supported")
@@ -192,6 +207,11 @@ def train(
             E_opt.step()
             G_opt.step()
 
+            # Update output networks
+            util.update_output_network(F_out, Fnet)
+            util.update_output_network(E_out, E)
+            util.update_output_network(G_out, G)
+
             if progress_bar:
                 percent = ((n_shifting_steps_taken + n_static_steps_taken) % n_steps_per_output) / (
                         n_steps_per_output / 100.0)
@@ -218,12 +238,12 @@ def train(
 
                 print()
 
-                test_batch = torch.clamp(G(Fnet(test_z), phase=phase).detach(), 0, 1)
+                test_batch = torch.clamp(G_out(F_out(test_z), phase=phase).detach(), 0, 1)
                 torchvision.utils.save_image(test_batch, os.path.join(output_path, "results_%d_%d_%.3f.png" % (
                     n_static_steps_taken, n_shifting_steps_taken, phase)))
 
                 x_res = F.interpolate(test_x, 4 * (2 ** (math.ceil(phase))), mode='bilinear')
-                test_recons = torch.clamp(G(E(x_res, phase=phase), phase=phase).detach(), 0, 1)
+                test_recons = torch.clamp(G_out(E_out(x_res, phase=phase), phase=phase).detach(), 0, 1)
                 torchvision.utils.save_image(torch.cat([x_res, test_recons], dim=0),
                                              os.path.join(output_path, "encoding", "results_%d_%d_%.3f.png" % (
                                              n_static_steps_taken, n_shifting_steps_taken, phase)),
@@ -232,6 +252,9 @@ def train(
                 torch.save(G, os.path.join(output_path, "G.pt"))
                 torch.save(E, os.path.join(output_path, "E.pt"))
                 torch.save(Fnet, os.path.join(output_path, "F.pt"))
+                torch.save(G_out, os.path.join(output_path, "G_out.pt"))
+                torch.save(E_out, os.path.join(output_path, "E_out.pt"))
+                torch.save(F_out, os.path.join(output_path, "F_out.pt"))
                 info = {
                     "n_stat": n_static_steps_taken,
                     "n_shift": n_shifting_steps_taken,

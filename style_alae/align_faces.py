@@ -21,13 +21,14 @@ import scipy.ndimage
 # 69	111	108	111	88	136	72	152	105	152
 # 44	51	83	51	63	76	47	92	80	92
 
-use_1024 = False
-input_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128/"
-output_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/aligned64/"
+
+predictor_path = 'style_alae/shape_predictor_68_face_landmarks.dat'
+
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor(predictor_path)
 
 
-
-def align(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4096, item_idx=0, enable_padding=True):
+def align(img, parts, output_size=64, transform_size=128, enable_padding=True):
     # Parse landmarks.
     lm = np.array(parts)
     lm_chin          = lm[0: 17]  # left-right
@@ -54,19 +55,13 @@ def align(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4
     x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
     x /= np.hypot(*x)
 
-    if use_1024:
-        x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)
-    else:
-        x *= (np.hypot(*eye_to_eye) * 1.6410 + np.hypot(*eye_to_mouth) * 1.560) / 2.0
+
+    x *= (np.hypot(*eye_to_eye) * 1.6410 + np.hypot(*eye_to_mouth) * 1.560) / 2.0
 
     y = np.flipud(x) * [-1, 1]
 
-    if use_1024:
-        c = eye_avg + eye_to_mouth * 0.1
-        quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
-    else:
-        c = eye_avg + eye_to_mouth * 0.317
-        quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
+    c = eye_avg + eye_to_mouth * 0.317
+    quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
 
     qsize = np.hypot(*x) * 2
 
@@ -112,6 +107,11 @@ def align(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4
     img = img.transform((transform_size, transform_size), PIL.Image.QUAD, (quad + 0.5).flatten(), PIL.Image.BILINEAR)
     if output_size < transform_size:
         img = img.resize((output_size, output_size), PIL.Image.ANTIALIAS)
+    return img
+
+
+def align_and_save(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4096, item_idx=0, enable_padding=True):
+    align(img, parts,  output_size=1024, transform_size=4096, enable_padding=True)
 
     # Save aligned image.
     dst_subdir = dst_dir
@@ -119,34 +119,48 @@ def align(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4
     img.save(os.path.join(dst_subdir, '%06d.png' % item_idx))
 
 
-predictor_path = 'shape_predictor_68_face_landmarks.dat'
-
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(predictor_path)
-
-item_idx = 0
-
-for filename in os.listdir(input_dir):
-    img = np.asarray(Image.open(os.path.join(input_dir, filename)))
+def align_from_PIL(img, output_size=64, transform_size=128, enable_padding=True):
+    img = np.asarray(img)
     if img.shape[2] == 4:
         img = img[:, :, :3]
 
     dets = detector(img, 0)
-    print("Number of faces detected: {}".format(len(dets)))
+    d = dets[0]
+    shape = predictor(img, d)
+    parts = shape.parts()
+    parts = [[part.x, part.y] for part in parts]
 
-    for i, d in enumerate(dets):
-        print("Detection {}: Left: {} Top: {} Right: {} Bottom: {}".format(
-        i, d.left(), d.top(), d.right(), d.bottom()))
+    out = align(img, parts, output_size, transform_size, enable_padding)
+    return out
 
-        shape = predictor(img, d)
+if __name__ == "__main__":
+    item_idx = 0
 
-        parts = shape.parts()
+    use_1024 = False
+    input_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128/"
+    output_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/aligned64/"
 
-        parts = [[part.x, part.y] for part in parts]
+    for filename in os.listdir(input_dir):
+        img = np.asarray(Image.open(os.path.join(input_dir, filename)))
+        if img.shape[2] == 4:
+            img = img[:, :, :3]
 
-        if use_1024:
-            align(img, parts, dst_dir=output_dir, output_size=1024, transform_size=4098, item_idx=item_idx)
-        else:
-            align(img, parts, dst_dir=output_dir, output_size=64, transform_size=128, item_idx=item_idx)
+        dets = detector(img, 0)
+        print("Number of faces detected: {}".format(len(dets)))
 
-        item_idx += 1
+        for i, d in enumerate(dets):
+            print("Detection {}: Left: {} Top: {} Right: {} Bottom: {}".format(
+            i, d.left(), d.top(), d.right(), d.bottom()))
+
+            shape = predictor(img, d)
+
+            parts = shape.parts()
+
+            parts = [[part.x, part.y] for part in parts]
+
+            if use_1024:
+                align(img, parts, dst_dir=output_dir, output_size=1024, transform_size=4098, item_idx=item_idx)
+            else:
+                align(img, parts, dst_dir=output_dir, output_size=64, transform_size=128, item_idx=item_idx)
+
+            item_idx += 1

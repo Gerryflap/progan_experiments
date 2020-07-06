@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as tvF
 from PIL import Image
-
+import style_alae.align_faces as af
 import dlib
 
 parser = argparse.ArgumentParser(description="Image to latent vector converter.")
@@ -19,6 +19,8 @@ parser.add_argument("--phase", action="store", type=float, help="Model phase", d
 
 parser.add_argument("--fix_contrast", action="store_true", default=False,
                     help="If true, makes sure that the colors in the image span from 0-255")
+parser.add_argument("--ALAE_align", action="store_true", default=False,
+                    help="Uses ALAE face alignment")
 args = parser.parse_args()
 
 resolution = 4 * (2**math.ceil(args.phase))
@@ -38,26 +40,32 @@ real_resolution = resolution
 
 
 def load_process_img(fname):
+    global args
+
     frame = Image.open(fname)
-    frame = np.array(frame)
+    if not args.ALAE_align:
+        frame = np.array(frame)
 
-    dets = detector(frame, 1)
+        dets = detector(frame, 1)
 
-    num_faces = len(dets)
-    if num_faces == 0:
-        print("No faces found!")
-        exit()
+        num_faces = len(dets)
+        if num_faces == 0:
+            print("No faces found!")
+            exit()
 
-    # Find the 5 face landmarks we need to do the alignment.
-    faces = dlib.full_object_detections()
-    for detection in dets:
-        faces.append(sp(frame, detection))
+        # Find the 5 face landmarks we need to do the alignment.
+        faces = dlib.full_object_detections()
+        for detection in dets:
+            faces.append(sp(frame, detection))
 
-    crop_region_size = 0
-    frame = dlib.get_face_chip(frame, faces[0], size=(64 + crop_region_size * 2))
+        crop_region_size = 0
+        frame = dlib.get_face_chip(frame, faces[0], size=(64 + crop_region_size * 2))
 
-    if crop_region_size != 0:
-        frame = frame[crop_region_size:-crop_region_size, crop_region_size:-crop_region_size]
+        if crop_region_size != 0:
+            frame = frame[crop_region_size:-crop_region_size, crop_region_size:-crop_region_size]
+    else:
+        frame = np.array(af.align_from_PIL(frame))
+
 
     if args.fix_contrast:
         frame = frame.astype(np.float32)
