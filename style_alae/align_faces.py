@@ -125,6 +125,8 @@ def align_from_PIL(img, output_size=64, transform_size=128, enable_padding=True)
         img = img[:, :, :3]
 
     dets = detector(img, 0)
+    if len(dets) == 0:
+        return None
     d = dets[0]
     shape = predictor(img, d)
     parts = shape.parts()

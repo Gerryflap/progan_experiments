@@ -14,6 +14,7 @@ import dlib
 # image = None
 orig_img = None
 should_update = True
+alt_alignment = True
 
 root = tk.Tk()
 filename_enc = tk.filedialog.askopenfilename(initialdir="./results", title="Select encoder",
@@ -34,12 +35,16 @@ Gz.eval()
 Gx.eval()
 
 cap = cv2.VideoCapture(0)
-predictor_path = "shape_predictor_5_face_landmarks.dat"
-detector = dlib.get_frontal_face_detector()
-sp = dlib.shape_predictor(predictor_path)
+
+if not alt_alignment:
+    predictor_path = "shape_predictor_5_face_landmarks.dat"
+    detector = dlib.get_frontal_face_detector()
+    sp = dlib.shape_predictor(predictor_path)
+else:
+    import style_alae.align_faces as af
 
 z_size = Gx.w_size
-phase = 3.8
+phase = 4.0
 resolution = int(Gx(torch.zeros((1, z_size, 1, 1), device="cuda"), phase=phase).size()[2])
 print(resolution)
 real_resolution = resolution
@@ -55,22 +60,30 @@ def update():
     print(frame.shape)
     frame = frame[:, ::-1, ::-1]
 
-    dets = detector(frame)
+    if not alt_alignment:
+        dets = detector(frame)
 
-    num_faces = len(dets)
-    if num_faces == 0:
-        print("No faces found")
-        root.after(1, update)
-        return
+        num_faces = len(dets)
+        if num_faces == 0:
+            print("No faces found")
+            root.after(1, update)
+            return
 
-    # Find the 5 face landmarks we need to do the alignment.
-    faces = dlib.full_object_detections()
-    for detection in dets:
-        faces.append(sp(frame, detection))
+        # Find the 5 face landmarks we need to do the alignment.
+        faces = dlib.full_object_detections()
+        for detection in dets:
+            faces.append(sp(frame, detection))
 
-    frame = dlib.get_face_chip(frame, faces[0], size=64)
-    #frame = frame[::2, ::2]
-
+        frame = dlib.get_face_chip(frame, faces[0], size=64)
+        #frame = frame[::2, ::2]
+    else:
+        img = Image.fromarray(frame)
+        img = af.align_from_PIL(img)
+        if img is None:
+            print("No faces found!")
+            root.after(1, update)
+            return
+        frame = np.array(img)
 
 
     frame = frame.astype(np.float32)
