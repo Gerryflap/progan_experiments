@@ -1,7 +1,9 @@
 import torch
 from torch import nn
+from torch.utils.data import Dataset
 
-lrelu_gain = (2.0/(1+0.2**2))**0.5
+lrelu_gain = (2.0 / (1 + 0.2 ** 2)) ** 0.5
+
 
 def weights_init(m):
     # This was taken from the PyTorch DCGAN tutorial: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
@@ -37,7 +39,8 @@ def weights_init(m):
 
 
 class Conv2dNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False, gain=lrelu_gain):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True,
+                 weight_norm=False, gain=lrelu_gain):
         super().__init__()
         self.stride = stride
         self.padding = padding
@@ -67,7 +70,8 @@ class Conv2dNormalizedLR(torch.nn.Module):
 
 
 class Conv2dTransposeNormalizedLR(torch.nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True, weight_norm=False, gain=lrelu_gain):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=1, stride=1, padding=0, bias=True,
+                 weight_norm=False, gain=lrelu_gain):
         super().__init__()
         self.stride = stride
         self.padding = padding
@@ -96,10 +100,11 @@ class Conv2dTransposeNormalizedLR(torch.nn.Module):
         if self.bias is not None:
             nn.init.constant_(self.bias.data, 0)
 
+
 class LinearNormalizedLR(torch.nn.Module):
     def __init__(self, in_channels: int, out_channels: int, bias=True, weight_norm=False, gain=lrelu_gain):
         super().__init__()
-        self.he_constant = gain / (float(in_channels)**0.5)
+        self.he_constant = gain / (float(in_channels) ** 0.5)
 
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
         self.weight_norm = weight_norm
@@ -194,8 +199,9 @@ def apply_weight_norm(w, input_dims=(1, 2, 3), eps=1e-8):
     :param w: Weights
     :return: Normed weights
     """
-    divisor = torch.sqrt((w**2).sum(dim=input_dims, keepdim=True) + eps)
+    divisor = torch.sqrt((w ** 2).sum(dim=input_dims, keepdim=True) + eps)
     return w / divisor
+
 
 class Reshape(torch.nn.Module):
     def __init__(self, shape):
@@ -205,14 +211,18 @@ class Reshape(torch.nn.Module):
     def forward(self, x):
         return x.view(*self.shape)
 
+
 class ToColorTransform(object):
     def __call__(self, img):
-        out = torch.cat([img]*3, dim=0)
+        out = torch.cat([img] * 3, dim=0)
         return out
+
 
 def pixel_norm(x, epsilon=1e-8):
     # This function is taken from ALAE (https://github.com/podgorskiy/ALAE/)
     return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+
+
 
 if __name__ == "__main__":
     layers = [Conv2dNormalizedLR(10, 10, 3, padding=1) for i in range(10)]

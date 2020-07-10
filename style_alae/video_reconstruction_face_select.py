@@ -74,11 +74,11 @@ def update():
         for detection in dets:
             faces.append(sp(frame, detection))
 
-        frame = dlib.get_face_chip(frame, faces[0], size=64)
+        frame = dlib.get_face_chip(frame, faces[0], size=128)
         #frame = frame[::2, ::2]
     else:
         img = Image.fromarray(frame)
-        img = af.align_from_PIL(img)
+        img = af.align_from_PIL(img, output_size=128)
         if img is None:
             print("No faces found!")
             root.after(1, update)
@@ -90,6 +90,11 @@ def update():
     imin, imax = np.min(frame), np.max(frame)
     frame -= imin
     frame *= 255.0/(imax - imin)
+    # For my shitty webcam
+    brightness = 20
+    frame *= (255 - brightness)/255.0
+    frame += brightness
+
     frame = frame.astype(np.uint8)
 
 
