@@ -5,7 +5,7 @@ At this moment it is mostly focussed on StyleALAE and all other algorithms will 
 
 
 ## Current results
-
+Currently style mixing is not implemented. All models were trained without.
 ### Small model
 The current StyleALAE implementation does appear to yield okay results.
 Below are the results of a small model trained
