@@ -13,7 +13,7 @@ import util
 
 # Algo
 from style_alae.models_and_components import ALAEGenerator, ALAEEncoder,  Fnetwork, Discriminator
-from style_alae.stylegan2.models import ALAEGeneratorStyleGAN2
+from style_alae.stylegan2.models import ALAEGeneratorStyleGAN2, ALAEResidualEncoder, ALAESkipEncoder
 
 
 def train(
@@ -54,11 +54,16 @@ def train(
     if not use_stylegan2_gen:
         G = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
         G_out = ALAEGenerator(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        E_out = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor,
+                            max_h_size=max_h_size)
     else:
         G = ALAEGeneratorStyleGAN2(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
         G_out = ALAEGeneratorStyleGAN2(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
-    E = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
-    E_out = ALAEEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        E = ALAEResidualEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor, max_h_size=max_h_size)
+        E_out = ALAEResidualEncoder(latent_size, max_upscales, h_size, scaling_factor=network_scaling_factor,
+                            max_h_size=max_h_size)
+
 
     Fnet = Fnetwork(latent_size, 8)
     F_out = Fnetwork(latent_size, 8)
@@ -313,17 +318,17 @@ if __name__ == "__main__":
           n_shifting_steps=5000,
           n_static_steps=5000,
           batch_size=16,
-          latent_size=256,
-          h_size=64,
-          lr=0.004,
+          latent_size=128,
+          h_size=32,
+          lr=0.003,
           gamma=10.0,
           max_upscales=3,
           network_scaling_factor=2.0,
-          start_phase=1,
+          start_phase=3,
           progress_bar=False,
           num_workers=4,
-          n_steps_per_output=200,
-          max_h_size=256,
-          use_stylegan2_gen=False,
+          n_steps_per_output=1000,
+          max_h_size=128,
+          use_stylegan2_gen=True,
           reg_every_n_steps=1
           )

@@ -130,6 +130,7 @@ class StyleALAEGeneratorBlock(torch.nn.Module):
 
 
 class ALAEEncoder(torch.nn.Module):
+    EncBlock = StyleALAEEncoderBlock
     def __init__(self, w_size, n_downscales, full_res_h_size, scaling_factor=2, max_h_size: int = 1e10):
         super().__init__()
         self.n_downscales = n_downscales
@@ -139,13 +140,13 @@ class ALAEEncoder(torch.nn.Module):
 
         self.deepest_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales))), max_h_size)
 
-        outp_block = StyleALAEEncoderBlock(self.deepest_channels, self.deepest_channels, w_size)
+        outp_block = self.EncBlock(self.deepest_channels, self.deepest_channels, w_size)
 
         self.layer_list = [outp_block]
         for i in range(n_downscales):
             inp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i - 1))), max_h_size)
             outp_channels = min(int(full_res_h_size * (self.scaling_factor ** (n_downscales - i))), max_h_size)
-            self.layer_list.append(StyleALAEEncoderBlock(inp_channels, outp_channels, w_size))
+            self.layer_list.append(self.EncBlock(inp_channels, outp_channels, w_size))
         self.layers = torch.nn.ModuleList(self.layer_list)
         self.reset_parameters()
 
