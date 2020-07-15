@@ -26,3 +26,11 @@ Below are the results of a larger model trained
 
 Generated images when using Ψ = 0.85:
 ![There should be an image here](results/grid_output_large.png)
+
+### StyleGAN2 inspired
+Below are the results of a skip-connection generator with StyleGAN2 weight modulation and demodulation and a residual E trained with
+- 90,000 batches at 64x64
+- with 128 channels at 64x64, and 256 for all smaller resolutions. Also using a latent size of 256.
+
+Generated images when using Ψ = 0.85:
+![There should be an image here](results/grid_output_sg2.png)
