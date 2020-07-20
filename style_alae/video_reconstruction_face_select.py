@@ -15,6 +15,11 @@ import dlib
 orig_img = None
 should_update = True
 alt_alignment = True
+alt_alignment_large = False
+
+if alt_alignment_large and not alt_alignment:
+    raise ValueError("alt_alignment should be true when alt_alignment_large is true")
+
 
 root = tk.Tk()
 filename_enc = tk.filedialog.askopenfilename(initialdir="./results", title="Select encoder",
@@ -44,7 +49,7 @@ else:
     import style_alae.align_faces as af
 
 z_size = Gx.w_size
-phase = 4.0
+phase = 3.0
 resolution = int(Gx(torch.zeros((1, z_size, 1, 1), device="cuda"), phase=phase).size()[2])
 print(resolution)
 real_resolution = resolution
@@ -78,7 +83,7 @@ def update():
         #frame = frame[::2, ::2]
     else:
         img = Image.fromarray(frame)
-        img = af.align_from_PIL(img, output_size=128)
+        img = af.align_from_PIL(img, output_size=128, large=alt_alignment_large)
         if img is None:
             print("No faces found!")
             root.after(1, update)

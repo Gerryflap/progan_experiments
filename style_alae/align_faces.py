@@ -28,7 +28,7 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(predictor_path)
 
 
-def align(img, parts, output_size=64, transform_size=128, enable_padding=True):
+def align(img, parts, output_size=64, transform_size=128, enable_padding=True, large=False):
     # Parse landmarks.
     lm = np.array(parts)
     lm_chin          = lm[0: 17]  # left-right
@@ -55,8 +55,10 @@ def align(img, parts, output_size=64, transform_size=128, enable_padding=True):
     x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
     x /= np.hypot(*x)
 
-
-    x *= (np.hypot(*eye_to_eye) * 1.6410 + np.hypot(*eye_to_mouth) * 1.560) / 2.0
+    if large:
+        x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)
+    else:
+        x *= (np.hypot(*eye_to_eye) * 1.6410 + np.hypot(*eye_to_mouth) * 1.560) / 2.0
 
     y = np.flipud(x) * [-1, 1]
 
@@ -110,8 +112,8 @@ def align(img, parts, output_size=64, transform_size=128, enable_padding=True):
     return img
 
 
-def align_and_save(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4096, item_idx=0, enable_padding=True):
-    align(img, parts,  output_size=1024, transform_size=4096, enable_padding=True)
+def align_and_save(img, parts, dst_dir='cropped_imgs', output_size=1024, transform_size=4096, item_idx=0, enable_padding=True, large=False):
+    img = align(img, parts,  output_size=output_size, transform_size=transform_size, enable_padding=enable_padding, large=large)
 
     # Save aligned image.
     dst_subdir = dst_dir
@@ -119,7 +121,7 @@ def align_and_save(img, parts, dst_dir='cropped_imgs', output_size=1024, transfo
     img.save(os.path.join(dst_subdir, '%06d.png' % item_idx))
 
 
-def align_from_PIL(img, output_size=64, transform_size=128, enable_padding=True):
+def align_from_PIL(img, output_size=64, transform_size=128, enable_padding=True, large=False):
     img = np.asarray(img)
     if img.shape[2] == 4:
         img = img[:, :, :3]
@@ -132,7 +134,7 @@ def align_from_PIL(img, output_size=64, transform_size=128, enable_padding=True)
     parts = shape.parts()
     parts = [[part.x, part.y] for part in parts]
 
-    out = align(img, parts, output_size, transform_size, enable_padding)
+    out = align(img, parts, output_size, transform_size, enable_padding, large)
     return out
 
 if __name__ == "__main__":
@@ -140,7 +142,7 @@ if __name__ == "__main__":
 
     use_1024 = False
     input_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/thumbnails128x128/"
-    output_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/aligned64/"
+    output_dir = "/run/media/gerben/LinuxData/data/ffhq_thumbnails/aligned128/"
 
     for filename in os.listdir(input_dir):
         img = np.asarray(Image.open(os.path.join(input_dir, filename)))
@@ -161,8 +163,8 @@ if __name__ == "__main__":
             parts = [[part.x, part.y] for part in parts]
 
             if use_1024:
-                align(img, parts, dst_dir=output_dir, output_size=1024, transform_size=4098, item_idx=item_idx)
+                align_and_save(img, parts, dst_dir=output_dir, output_size=1024, transform_size=4098, item_idx=item_idx)
             else:
-                align(img, parts, dst_dir=output_dir, output_size=64, transform_size=128, item_idx=item_idx)
+                align_and_save(img, parts, dst_dir=output_dir, output_size=128, transform_size=256, item_idx=item_idx, large=True)
 
             item_idx += 1

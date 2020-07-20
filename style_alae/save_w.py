@@ -21,6 +21,8 @@ parser.add_argument("--fix_contrast", action="store_true", default=False,
                     help="If true, makes sure that the colors in the image span from 0-255")
 parser.add_argument("--ALAE_align", action="store_true", default=False,
                     help="Uses ALAE face alignment")
+parser.add_argument("--ALAE_align_large", action="store_true", default=False,
+                    help="Uses ALAE face alignment for larger images")
 args = parser.parse_args()
 
 resolution = 4 * (2**math.ceil(args.phase))
@@ -43,7 +45,7 @@ def load_process_img(fname):
     global args
 
     frame = Image.open(fname)
-    if not args.ALAE_align:
+    if not (args.ALAE_align or args.ALAE_align_large):
         frame = np.array(frame)
 
         dets = detector(frame, 1)
@@ -64,7 +66,7 @@ def load_process_img(fname):
         if crop_region_size != 0:
             frame = frame[crop_region_size:-crop_region_size, crop_region_size:-crop_region_size]
     else:
-        frame = np.array(af.align_from_PIL(frame))
+        frame = np.array(af.align_from_PIL(frame, large=args.ALAE_align_large, output_size=resolution, transform_size=resolution))
 
 
     if args.fix_contrast:

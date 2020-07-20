@@ -240,14 +240,16 @@ class ALAEGenerator(torch.nn.Module):
 
 
 class Discriminator(torch.nn.Module):
-    def __init__(self, latent_size, n_layers=3):
+    def __init__(self, latent_size, n_layers=3, progan_variation=False):
         super().__init__()
         self.latent_size = latent_size
         self.n_layers = n_layers
         self.layers = []
+        self.progan_variation = progan_variation
         for i in range(n_layers):
             out_size = (self.latent_size if (i != n_layers-1) else 1)
-            self.layers.append(LinearNormalizedLR(latent_size, out_size))
+            in_size = (self.latent_size if not (i == 0 and progan_variation) else (self.latent_size + 1))
+            self.layers.append(LinearNormalizedLR(in_size, out_size))
         self.params = torch.nn.ModuleList(self.layers)
         self.reset_parameters()
 
@@ -257,6 +259,13 @@ class Discriminator(torch.nn.Module):
 
     def forward(self, x):
         x = x.view(-1, self.latent_size)
+        if hasattr(self, "progan_variation") and self.progan_variation:
+            # Apply the ProGAN mbatch stddev trick
+            stddevs = x.std(dim=0, keepdim=True)
+            stddev = stddevs.mean()
+            feature = torch.zeros_like(x[:, :1]) + stddev
+            x = torch.cat([x, feature], dim=1)
+
         for i, layer in enumerate(self.layers):
             x = layer(x)
             if i != len(self.layers) - 1:

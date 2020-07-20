@@ -30,6 +30,7 @@ train(dataset2,
       n_steps_per_output=2000,
       max_h_size=256,
       use_stylegan2_gen=True,
-      reg_every_n_steps=1
+      reg_every_n_steps=1,
+      progan_variation=True
       )
 

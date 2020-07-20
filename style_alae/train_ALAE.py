@@ -37,7 +37,9 @@ def train(
         load_path=None,
         # Path to experiment folder. Can be used to load a checkpoint. It currently only sets the parameters, not hyperparameters!
         use_stylegan2_gen=False,
-        reg_every_n_steps=1         # R1 regularization is only applied every n steps. Gamma is multiplied by n.
+        reg_every_n_steps=1,         # R1 regularization is only applied every n steps. Gamma is multiplied by n.
+        progan_variation=False,      # When enabled, gives D batch statistics which should improve variation. Is explained in ProGAN.
+        recon_factor=1.0,            # Scales step 3, the reconstruction step. Can be used for experiments with better reconstruction
 
 ):
     if max_h_size is None:
@@ -68,7 +70,7 @@ def train(
     Fnet = Fnetwork(latent_size, 8)
     F_out = Fnetwork(latent_size, 8)
 
-    D = Discriminator(latent_size, 3)
+    D = Discriminator(latent_size, 3, progan_variation=progan_variation)
 
     G = G.cuda()
     D = D.cuda()
@@ -207,7 +209,7 @@ def train(
                 z = torch.normal(0, 1, (batch_size, latent_size), device="cuda")
                 w = Fnet(z)
             w_recon = E(G(w, phase=phase), phase=phase)
-            loss = F.mse_loss(w_recon, w)
+            loss = F.mse_loss(w_recon, w) * recon_factor
             loss.backward()
             E_opt.step()
             G_opt.step()
@@ -330,5 +332,7 @@ if __name__ == "__main__":
           n_steps_per_output=1000,
           max_h_size=128,
           use_stylegan2_gen=True,
-          reg_every_n_steps=1
+          reg_every_n_steps=1,
+          progan_variation=True,
+          recon_factor=2.0
           )
